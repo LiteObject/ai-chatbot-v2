@@ -251,6 +251,57 @@ describe("handleChatTurn", () => {
     expect(appBuilder.requests[0]?.appSpec.authRequired).toBe(true);
   });
 
+  it("captures auth provider integrations during confirmation changes", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new StubLlmClient([
+      {
+        purpose: "analyze webpages and generate comparable pages",
+        appType: "chatbot",
+        targetUsers: ["web developers"],
+        dataEntities: ["webpage examples", "generated webpages"],
+        coreFeatures: ["analyze webpage examples", "download source files"],
+        deploymentTarget: "mobile"
+      },
+      {}
+    ]);
+
+    await handleChatTurn({
+      conversationId: "conv_google_auth",
+      userId: "user_1",
+      message: "Build a mobile chatbot for web developers that analyzes webpages and generates comparable pages.",
+      repository,
+      llmClient,
+      appBuilder
+    });
+
+    const changeResponse = await handleChatTurn({
+      conversationId: "conv_google_auth",
+      userId: "user_1",
+      message: "Also integrate with Google auth",
+      repository,
+      llmClient,
+      appBuilder
+    });
+
+    expect(changeResponse.status).toBe("awaiting_confirmation");
+    expect(changeResponse.appSpec.authRequired).toBe(true);
+    expect(changeResponse.appSpec.integrations).toEqual(["Google auth"]);
+    expect(appBuilder.requests).toHaveLength(0);
+
+    const createdResponse = await handleChatTurn({
+      conversationId: "conv_google_auth",
+      userId: "user_1",
+      message: "yes",
+      repository,
+      llmClient,
+      appBuilder
+    });
+
+    expect(createdResponse.status).toBe("created");
+    expect(appBuilder.requests[0]?.appSpec.integrations).toEqual(["Google auth"]);
+  });
+
   it("keeps a created conversation created when the user says thanks", async () => {
     const repository = new InMemoryConversationRepository();
     const appBuilder = new MockAppBuilderClient();
@@ -293,6 +344,52 @@ describe("handleChatTurn", () => {
     expect(response.status).toBe("created");
     expect(response.message).toContain("You're welcome");
     expect(response.message).toContain("http://localhost:3000/apps/app_mock_1");
+    expect(llmClient.extractCalls).toBe(1);
+    expect(appBuilder.requests).toHaveLength(1);
+  });
+
+  it("does not start another build from a created conversation", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new StubLlmClient([
+      {
+        purpose: "manage employees",
+        appType: "crud",
+        targetUsers: ["HR admins"],
+        dataEntities: ["employee"],
+        coreFeatures: ["create employees", "update employees"]
+      }
+    ]);
+
+    await handleChatTurn({
+      conversationId: "conv_no_second_build",
+      userId: "user_1",
+      message: "Build an employee manager for HR admins.",
+      repository,
+      llmClient,
+      appBuilder
+    });
+    await handleChatTurn({
+      conversationId: "conv_no_second_build",
+      userId: "user_1",
+      message: "yes",
+      repository,
+      llmClient,
+      appBuilder
+    });
+
+    const response = await handleChatTurn({
+      conversationId: "conv_no_second_build",
+      userId: "user_1",
+      message: "Add auth",
+      repository,
+      llmClient,
+      appBuilder
+    });
+
+    expect(response.status).toBe("created");
+    expect(response.message).toContain("already been created");
+    expect(response.appSpec.authRequired).toBeUndefined();
     expect(llmClient.extractCalls).toBe(1);
     expect(appBuilder.requests).toHaveLength(1);
   });

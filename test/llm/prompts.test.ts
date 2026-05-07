@@ -10,6 +10,13 @@ describe("prompt builders", () => {
     expect(prompt).toContain("Do not use those words as appType");
   });
 
+  it("tells extraction to treat auth providers as integrations", () => {
+    const prompt = buildExtractionPrompt("Also integrate with Google auth", createEmptyAppSpec(), []);
+
+    expect(prompt).toContain("set authRequired to true");
+    expect(prompt).toContain("include the provider in integrations");
+  });
+
   it("clarifies that appType is not web/mobile/desktop", () => {
     const prompt = buildClarifyingQuestionPrompt(createEmptyAppSpec(), ["appType", "purpose"]);
 

@@ -16,6 +16,7 @@ Rules:
 - Preserve existing state unless the user clearly corrects it.
 - Use null for unknown scalar fields and [] for unknown list fields only when you include those keys.
 - Do not invent integrations, roles, entities, or features.
+- If the user names an auth provider such as Google, Microsoft/Entra, GitHub, OAuth, OIDC, or SSO, set authRequired to true and include the provider in integrations.
 - If the user says web, mobile, desktop, iOS, Android, or similar, put that in deploymentTarget. Do not use those words as appType.
 - Infer appType from the app behavior when possible: record management is crud, metrics are dashboard, approval/process steps are workflow, conversational assistants are chatbot, shared access hubs are portal, otherwise use other.
 - Prefer concise user-facing wording.

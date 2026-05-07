@@ -95,10 +95,7 @@ async function handleChatTurnInternal(
   }
 
   if (state.status === "created") {
-    const response = getPostCreationCasualResponse(input.message, state);
-    if (response) {
-      return saveAndRespond(input.repository, state, response, contextWindow, telemetry, startedAt);
-    }
+    return saveAndRespond(input.repository, state, getCreatedConversationResponse(input.message, state), contextWindow, telemetry, startedAt);
   }
 
   return handleRequirementCollectionTurn(state, input, contextWindow, telemetry, startedAt);
@@ -420,6 +417,7 @@ function getContextLimitMessage(): string {
 function addDeterministicExtraction(message: string, extracted: Partial<AppSpec>): Partial<AppSpec> {
   const deploymentTarget = normalizePlatformDeploymentTarget(message);
   const authRequired = getDeterministicAuthRequirement(message);
+  const authIntegrations = getDeterministicAuthIntegrations(message);
   const next = { ...extracted };
 
   if (deploymentTarget && !hasValue(next.deploymentTarget)) {
@@ -428,6 +426,10 @@ function addDeterministicExtraction(message: string, extracted: Partial<AppSpec>
 
   if (authRequired !== undefined && !hasValue(next.authRequired)) {
     next.authRequired = authRequired;
+  }
+
+  if (authIntegrations.length > 0) {
+    next.integrations = [...(next.integrations ?? []), ...authIntegrations];
   }
 
   return next;
@@ -450,6 +452,31 @@ function getDeterministicAuthRequirement(message: string): boolean | undefined {
   }
 
   return true;
+}
+
+function getDeterministicAuthIntegrations(message: string): string[] {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return [];
+  }
+
+  const authProviderPattern = /\b(auth|authentication|login|log in|sign in|signin|sign-in|single sign-on|sso|oauth|openid connect|oidc)\b/;
+  if (!authProviderPattern.test(normalized)) {
+    return [];
+  }
+
+  const integrations: string[] = [];
+  if (/\bgoogle\b/.test(normalized)) {
+    integrations.push("Google auth");
+  }
+  if (/\b(microsoft|azure ad|entra|active directory)\b/.test(normalized)) {
+    integrations.push("Microsoft auth");
+  }
+  if (/\b(github|git hub)\b/.test(normalized)) {
+    integrations.push("GitHub auth");
+  }
+
+  return integrations;
 }
 
 function getCasualResponse(message: string): string | undefined {
@@ -482,17 +509,15 @@ function getCasualResponse(message: string): string | undefined {
   return undefined;
 }
 
-function getPostCreationCasualResponse(message: string, state: ConversationState): string | undefined {
+function getCreatedConversationResponse(message: string, state: ConversationState): string {
   const normalized = message.trim().toLowerCase();
-  if (!/^(thanks|thank you|thx)\b/.test(normalized)) {
-    return undefined;
+  const appLocation = state.createdAppUrl ? ` at ${state.createdAppUrl}` : "";
+
+  if (/^(thanks|thank you|thx)\b/.test(normalized)) {
+    return `You're welcome. The created app is still available${appLocation}.`;
   }
 
-  if (state.createdAppUrl) {
-    return `You're welcome. The created app is still available at ${state.createdAppUrl}.`;
-  }
-
-  return "You're welcome. The app has been created.";
+  return `This app has already been created${appLocation}. Use New to start a revised app or another build.`;
 }
 
 function countExtractedFields(extracted: Partial<AppSpec>): number {
