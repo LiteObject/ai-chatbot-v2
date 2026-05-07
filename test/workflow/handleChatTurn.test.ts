@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { AppBuilderClient, CreateAppRequest } from "../../src/appBuilder/appBuilderClient";
 import { MockAppBuilderClient } from "../../src/appBuilder/mockAppBuilderClient";
 import type { PartialAppSpec } from "../../src/domain/appSpec";
 import type { ConfirmationDecision } from "../../src/domain/confirmation";
@@ -6,13 +7,17 @@ import type {
   ClarifyingQuestionInput,
   LlmClient
 } from "../../src/llm/llmClient";
+import type { Telemetry, TelemetryAttributes } from "../../src/observability/telemetry";
 import { InMemoryConversationRepository } from "../../src/persistence/inMemoryConversationRepository";
 import { handleChatTurn } from "../../src/workflow/handleChatTurn";
 
 class StubLlmClient implements LlmClient {
+  extractCalls = 0;
+
   constructor(private readonly extractions: PartialAppSpec[]) {}
 
   async extractAppSpec(): Promise<PartialAppSpec> {
+    this.extractCalls += 1;
     return this.extractions.shift() ?? {};
   }
 
@@ -26,6 +31,39 @@ class StubLlmClient implements LlmClient {
 
   async classifyConfirmation(): Promise<ConfirmationDecision> {
     return "ambiguous";
+  }
+}
+
+class ThrowingExtractionLlmClient extends StubLlmClient {
+  override async extractAppSpec(): Promise<PartialAppSpec> {
+    throw new Error("bedrock unavailable");
+  }
+}
+
+class FailingAppBuilder implements AppBuilderClient {
+  readonly requests: CreateAppRequest[] = [];
+
+  async createApp(request: CreateAppRequest): Promise<never> {
+    this.requests.push(structuredClone(request));
+    throw new Error("builder unavailable");
+  }
+}
+
+interface RecordedTelemetryRecord {
+  name: string;
+  attributes?: TelemetryAttributes;
+}
+
+class RecordingTelemetry implements Telemetry {
+  readonly events: RecordedTelemetryRecord[] = [];
+  readonly metrics: Array<RecordedTelemetryRecord & { value: number }> = [];
+
+  event(name: string, attributes?: TelemetryAttributes): void {
+    this.events.push({ name, attributes });
+  }
+
+  metric(name: string, value: number, attributes?: TelemetryAttributes): void {
+    this.metrics.push({ name, value, attributes });
   }
 }
 
@@ -52,6 +90,48 @@ describe("handleChatTurn", () => {
 
     expect(response.status).toBe("collecting_requirements");
     expect(response.missingFields).toEqual(["targetUsers", "coreFeatures"]);
+    expect(appBuilder.requests).toHaveLength(0);
+  });
+
+  it("answers casual turns without repeating the clarifying prompt", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new StubLlmClient([{}]);
+
+    const response = await handleChatTurn({
+      conversationId: "conv_casual",
+      userId: "user_1",
+      message: "How are you?",
+      repository,
+      llmClient,
+      appBuilder
+    });
+
+    expect(response.status).toBe("collecting_requirements");
+    expect(response.message).toContain("I'm doing well");
+    expect(response.message).not.toContain("Missing:");
+    expect(response.missingFields).toEqual(["appType", "purpose"]);
+    expect(appBuilder.requests).toHaveLength(0);
+  });
+
+  it("preserves platform-only replies as deployment target", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new StubLlmClient([{}]);
+
+    const response = await handleChatTurn({
+      conversationId: "conv_mobile",
+      userId: "user_1",
+      message: "mobile",
+      repository,
+      llmClient,
+      appBuilder
+    });
+
+    expect(response.status).toBe("collecting_requirements");
+    expect(response.appSpec.deploymentTarget).toBe("mobile");
+    expect(response.missingFields).toEqual(["appType", "purpose"]);
+    expect(response.message).toBe("Missing: appType, purpose");
     expect(appBuilder.requests).toHaveLength(0);
   });
 
@@ -151,5 +231,113 @@ describe("handleChatTurn", () => {
 
     expect(response.status).toBe("collecting_requirements");
     expect(appBuilder.requests).toHaveLength(0);
+  });
+
+  it("blocks model work when the context window is full", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new StubLlmClient([
+      {
+        purpose: "manage employees",
+        appType: "crud"
+      }
+    ]);
+
+    const response = await handleChatTurn({
+      conversationId: "conv_5",
+      userId: "user_1",
+      message: "Build an app. ".repeat(80),
+      repository,
+      llmClient,
+      appBuilder,
+      contextWindow: {
+        maxTokens: 120,
+        warningRatio: 0.5,
+        blockRatio: 0.75
+      }
+    });
+
+    expect(response.contextWindow.status).toBe("blocked");
+    expect(response.message).toContain("configured context limit");
+    expect(llmClient.extractCalls).toBe(0);
+    expect(appBuilder.requests).toHaveLength(0);
+  });
+
+  it("logs and preserves requirements when app builder creation fails", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new FailingAppBuilder();
+    const llmClient = new StubLlmClient([
+      {
+        purpose: "manage employees",
+        appType: "crud",
+        targetUsers: ["HR admins"],
+        dataEntities: ["employee"],
+        coreFeatures: ["create employees", "update employees"]
+      }
+    ]);
+    const telemetry = new RecordingTelemetry();
+
+    await handleChatTurn({
+      conversationId: "conv_6",
+      userId: "user_1",
+      message: "Build an employee manager for HR admins.",
+      repository,
+      llmClient,
+      appBuilder,
+      telemetry
+    });
+
+    const response = await handleChatTurn({
+      conversationId: "conv_6",
+      userId: "user_1",
+      message: "yes",
+      repository,
+      llmClient,
+      appBuilder,
+      telemetry
+    });
+    const saved = await repository.get("conv_6");
+
+    expect(response.status).toBe("failed");
+    expect(response.message).toContain("Your requirements are saved");
+    expect(saved?.status).toBe("failed");
+    expect(saved?.appSpec).toMatchObject({
+      purpose: "manage employees",
+      appType: "crud"
+    });
+    expect(appBuilder.requests).toHaveLength(1);
+    expect(telemetry.events.map((event) => event.name)).toEqual(expect.arrayContaining([
+      "app_builder_call_started",
+      "app_builder_call_failed",
+      "chat_turn_completed"
+    ]));
+    expect(telemetry.metrics.map((metric) => metric.name)).toContain("app_creation_failure_count");
+  });
+
+  it("logs extraction failures before propagating them", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new ThrowingExtractionLlmClient([]);
+    const telemetry = new RecordingTelemetry();
+
+    await expect(handleChatTurn({
+      conversationId: "conv_7",
+      userId: "user_1",
+      message: "Build a sales app.",
+      repository,
+      llmClient,
+      appBuilder,
+      telemetry
+    })).rejects.toThrow("bedrock unavailable");
+
+    expect(telemetry.events.map((event) => event.name)).toEqual(expect.arrayContaining([
+      "requirement_extraction_started",
+      "requirement_extraction_failed",
+      "chat_turn_failed"
+    ]));
+    expect(telemetry.metrics.map((metric) => metric.name)).toEqual(expect.arrayContaining([
+      "llm_request_failure_count",
+      "chat_turn_failure_count"
+    ]));
   });
 });

@@ -1,7 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AppBuilderClient } from "../appBuilder/appBuilderClient";
+import {
+  defaultContextWindowOptions,
+  getContextWindowUsage,
+  type ContextWindowOptions
+} from "../domain/contextWindow";
+import type { ConversationState } from "../domain/conversationState";
 import type { LlmClient } from "../llm/llmClient";
+import { createCompositeTelemetry, createLoggerTelemetry, type Telemetry } from "../observability/telemetry";
 import type { ConversationRepository } from "../persistence/conversationRepository";
 import { handleChatTurn } from "../workflow/handleChatTurn";
 
@@ -11,13 +18,46 @@ const chatRequestSchema = z.object({
   message: z.string().trim().min(1)
 });
 
+const conversationParamsSchema = z.object({
+  conversationId: z.string().min(1)
+});
+
 export interface ChatRouteDependencies {
   repository: ConversationRepository;
   llmClient: LlmClient;
   appBuilder: AppBuilderClient;
+  contextWindow?: ContextWindowOptions;
+  telemetry?: Telemetry;
 }
 
 export async function registerChatRoutes(server: FastifyInstance, dependencies: ChatRouteDependencies): Promise<void> {
+  const contextWindow = dependencies.contextWindow ?? defaultContextWindowOptions;
+
+  server.get("/api/conversations/:conversationId", async (request, reply) => {
+    const parsed = conversationParamsSchema.safeParse(request.params);
+
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: "Invalid conversation request.",
+        details: parsed.error.flatten()
+      });
+    }
+
+    let state: ConversationState | undefined;
+    try {
+      state = await dependencies.repository.get(parsed.data.conversationId);
+    } catch (error) {
+      request.log.error({ err: error, conversationId: parsed.data.conversationId }, "Conversation load failed");
+      return reply.code(500).send({ error: "The conversation could not be loaded." });
+    }
+
+    if (!state) {
+      return reply.code(404).send({ error: "Conversation not found." });
+    }
+
+    return reply.send(serializeConversationState(state, contextWindow));
+  });
+
   server.post("/api/chat", async (request, reply) => {
     const parsed = chatRequestSchema.safeParse(request.body);
 
@@ -29,19 +69,40 @@ export async function registerChatRoutes(server: FastifyInstance, dependencies: 
     }
 
     try {
+      const telemetry = dependencies.telemetry
+        ? createCompositeTelemetry(createLoggerTelemetry(request.log), dependencies.telemetry)
+        : createLoggerTelemetry(request.log);
+
       const response = await handleChatTurn({
         ...parsed.data,
         repository: dependencies.repository,
         llmClient: dependencies.llmClient,
-        appBuilder: dependencies.appBuilder
+        appBuilder: dependencies.appBuilder,
+        contextWindow,
+        telemetry
       });
 
       return reply.send(response);
     } catch (error) {
-      request.log.error({ error }, "Chat turn failed");
+      request.log.error({ err: error, conversationId: parsed.data.conversationId, userId: parsed.data.userId ?? null }, "Chat turn failed");
       return reply.code(500).send({
         error: "The chatbot could not process the message."
       });
     }
   });
+}
+
+function serializeConversationState(state: ConversationState, contextWindow: ContextWindowOptions) {
+  return {
+    conversationId: state.conversationId,
+    status: state.status,
+    messages: state.messages,
+    appSpec: state.appSpec,
+    missingFields: state.missingFields,
+    contextWindow: getContextWindowUsage(state, contextWindow),
+    createdApp: state.createdAppId && state.createdAppUrl ? {
+      appId: state.createdAppId,
+      url: state.createdAppUrl
+    } : undefined
+  };
 }

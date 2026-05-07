@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export function parseJsonWithSchema<T>(text: string, schema: z.ZodType<T>): T {
+export function parseJsonWithSchema<T extends z.ZodTypeAny>(text: string, schema: T): z.output<T> {
   const jsonText = extractJsonObject(text);
   const parsed: unknown = JSON.parse(jsonText);
   return schema.parse(parsed);

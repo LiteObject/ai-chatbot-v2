@@ -68,6 +68,33 @@ The default model is:
 us.anthropic.claude-haiku-4-5-20251001-v1:0
 ```
 
+The local UI shows estimated context used over the configured model context window. Override the maximum with `BEDROCK_CONTEXT_WINDOW_TOKENS` when using a model with a different limit. The used value is estimated from server-side conversation state and current structured app spec, so provider token accounting may differ slightly.
+
+Context window handling is enforced on the backend:
+
+- Below `BEDROCK_CONTEXT_WINDOW_WARNING_RATIO`, the badge stays neutral and chat continues normally.
+- At or above `BEDROCK_CONTEXT_WINDOW_WARNING_RATIO` (default `0.8`), the badge changes to a warning state. If enough old messages exist, the backend compacts older transcript messages into the current structured app spec and keeps the latest turns.
+- At or above `BEDROCK_CONTEXT_WINDOW_BLOCK_RATIO` (default `0.95`), new LLM requirement extraction is paused to avoid silently dropping context. The current spec remains saved, and the UI disables the composer until the user starts a new conversation or the configured context window is increased.
+- Deterministic confirmation replies, such as a clear `yes` or `no` while the bot is awaiting confirmation, can still be handled without an LLM call.
+
+Tune these settings in `.env`:
+
+```text
+BEDROCK_CONTEXT_WINDOW_TOKENS=200000
+BEDROCK_CONTEXT_WINDOW_WARNING_RATIO=0.8
+BEDROCK_CONTEXT_WINDOW_BLOCK_RATIO=0.95
+```
+
+Bedrock calls use bounded retry with exponential backoff for transient service errors such as throttling, request timeouts, and 5xx responses. Tune these settings in `.env`:
+
+```text
+BEDROCK_RETRY_ATTEMPTS=3
+BEDROCK_RETRY_BASE_DELAY_MS=250
+BEDROCK_RETRY_MAX_DELAY_MS=2000
+```
+
+The service emits structured Pino events for chat turns, requirement extraction, missing fields, confirmation decisions, app-builder calls, and retry scheduling. Metric-style log records are emitted for turn latency, started conversations, clarification questions, confirmation decisions, app creation outcomes, LLM request failures, and structured-output repair failures. The local service also keeps process-local in-memory metrics and exposes them through `GET /api/metrics`; the right-side UI panel polls that endpoint while the server is running.
+
 ## Run
 
 ```bash
@@ -89,6 +116,12 @@ Content-Type: application/json
 }
 ```
 
+```http
+GET /api/metrics
+```
+
+`/api/metrics` returns counters since the current server process started, including chat turns, extraction failures, confirmation decisions, app creation outcomes, and average turn/app-builder latency.
+
 ## Scripts
 
 - `npm run dev` starts the Fastify service with `tsx`.
@@ -101,8 +134,9 @@ Content-Type: application/json
 ## Current Scope
 
 - In-memory conversation state.
-- Bedrock Converse API adapter.
+- Bedrock Converse API adapter with bounded transient retry.
 - Zod-validated app spec and state schemas.
 - Deterministic required-field validation.
 - Mock app-builder adapter that records create requests.
+- Structured workflow events, metric-style logs through Pino, and process-local `/api/metrics` counters.
 - Minimal local web UI for manual testing.

@@ -15,6 +15,7 @@ export default [
         __dirname: "readonly",
         URL: "readonly",
         fetch: "readonly",
+        setInterval: "readonly",
         document: "readonly",
         localStorage: "readonly",
         crypto: "readonly"

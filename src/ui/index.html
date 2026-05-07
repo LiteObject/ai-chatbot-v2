@@ -10,11 +10,17 @@
     <main class="shell">
       <section class="chat-region" aria-label="Chat">
         <header class="topbar">
-          <div>
-            <h1>App Builder Chatbot</h1>
-            <p id="statusText">Collecting requirements</p>
+          <div class="brand-block">
+            <span class="brand-mark" aria-hidden="true">AB</span>
+            <div class="brand-copy">
+              <h1>App Builder Chatbot</h1>
+              <p id="statusText">Collecting requirements</p>
+            </div>
           </div>
-          <button id="newConversationButton" type="button">New</button>
+          <div class="topbar-actions">
+            <span id="contextWindowBadge" class="context-window-badge" title="Estimated context used / configured window">Ctx - / -</span>
+            <button id="newConversationButton" type="button">New</button>
+          </div>
         </header>
 
         <div id="messages" class="messages" aria-live="polite"></div>
@@ -35,6 +41,13 @@
         <section class="missing-section">
           <h3>Missing</h3>
           <ul id="missingFields"></ul>
+        </section>
+        <section class="metrics-section" aria-label="Runtime metrics">
+          <div class="metrics-header">
+            <h3>Metrics</h3>
+            <span id="metricsUpdatedAt">-</span>
+          </div>
+          <dl id="metricsSummary" class="metrics-summary"></dl>
         </section>
       </aside>
     </main>

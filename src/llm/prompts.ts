@@ -1,19 +1,23 @@
-import type { AppSpec } from "../domain/appSpec";
+import { appTypes, type AppSpec } from "../domain/appSpec";
 
-const supportedAppTypes = ["dashboard", "workflow", "crud", "chatbot", "portal", "other"];
+const supportedAppTypes = appTypes.join(", ");
+const appTypeGuidance = "appType is the internal builder template: dashboard, workflow, CRUD, chatbot, portal, or other. It is not the device or platform.";
 
 export function buildExtractionPrompt(userMessage: string, currentSpec: AppSpec, missingFields: string[]): string {
   return `Extract app-building requirements from the user's latest message.
 
 Return only valid JSON with camelCase keys. The JSON must be a partial app spec. Do not include markdown.
 
-Supported appType values: ${supportedAppTypes.join(", ")}
+Supported appType values: ${supportedAppTypes}
+${appTypeGuidance}
 
 Rules:
 - Extract only information supported by the latest user message.
 - Preserve existing state unless the user clearly corrects it.
 - Use null for unknown scalar fields and [] for unknown list fields only when you include those keys.
 - Do not invent integrations, roles, entities, or features.
+- If the user says web, mobile, desktop, iOS, Android, or similar, put that in deploymentTarget. Do not use those words as appType.
+- Infer appType from the app behavior when possible: record management is crud, metrics are dashboard, approval/process steps are workflow, conversational assistants are chatbot, shared access hubs are portal, otherwise use other.
 - Prefer concise user-facing wording.
 
 Current app spec:
@@ -52,6 +56,8 @@ ${JSON.stringify(appSpec, null, 2)}
 
 Missing required fields:
 ${JSON.stringify(missingFields)}
+
+${appTypeGuidance} If appType is missing, ask what kind of builder template or app category fits, using examples like CRUD/records, dashboard, workflow, chatbot, portal, or other. Do not ask whether the app is web, mobile, or desktop unless deploymentTarget is missing and truly required.
 
 Ask at most 3 concise questions in one short paragraph. Prioritize fields required before app creation. If sensible defaults are possible, offer them briefly. Do not ask about anything the user already answered. Do not use markdown headings, bullets, numbered lists, or bold text.`;
 }

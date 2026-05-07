@@ -2,6 +2,8 @@ import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-r
 import { partialAppSpecSchema, type PartialAppSpec } from "../domain/appSpec";
 import type { ConfirmationDecision } from "../domain/confirmation";
 import type { AppConfig } from "../config";
+import { getErrorAttributes, noopTelemetry, type Telemetry } from "../observability/telemetry";
+import { isRetryableServiceError, withRetry } from "../reliability/retry";
 import type {
   ClarifyingQuestionInput,
   ConfirmationInput,
@@ -22,8 +24,11 @@ import { normalizeAssistantText } from "./textOutput";
 export class BedrockLlmClient implements LlmClient {
   private readonly client: BedrockRuntimeClient;
 
-  constructor(private readonly config: AppConfig) {
-    this.client = new BedrockRuntimeClient({ region: config.awsRegion });
+  constructor(
+    private readonly config: AppConfig,
+    private readonly telemetry: Telemetry = noopTelemetry
+  ) {
+    this.client = new BedrockRuntimeClient({ region: config.awsRegion, maxAttempts: 1 });
   }
 
   async extractAppSpec(input: ExtractAppSpecInput): Promise<PartialAppSpec> {
@@ -34,7 +39,14 @@ export class BedrockLlmClient implements LlmClient {
 
     try {
       return parseJsonWithSchema(text, partialAppSpecSchema);
-    } catch {
+    } catch (error) {
+      this.telemetry.event("llm_structured_output_validation_failed", {
+        task: "extract_app_spec",
+        ...getErrorAttributes(error)
+      });
+      this.telemetry.metric("llm_structured_output_failure_count", 1, {
+        task: "extract_app_spec"
+      });
       const repaired = await this.sendText(
         "You repair malformed JSON and return strict JSON only.",
         buildJsonRepairPrompt(text)
@@ -42,7 +54,14 @@ export class BedrockLlmClient implements LlmClient {
 
       try {
         return parseJsonWithSchema(repaired, partialAppSpecSchema);
-      } catch {
+      } catch (repairError) {
+        this.telemetry.event("llm_structured_output_repair_failed", {
+          task: "extract_app_spec",
+          ...getErrorAttributes(repairError)
+        });
+        this.telemetry.metric("llm_structured_output_repair_failure_count", 1, {
+          task: "extract_app_spec"
+        });
         return {};
       }
     }
@@ -95,7 +114,21 @@ export class BedrockLlmClient implements LlmClient {
       }
     });
 
-    const response = await this.client.send(command);
+    const response = await withRetry(() => this.client.send(command), {
+      attempts: this.config.bedrockRetryAttempts,
+      baseDelayMs: this.config.bedrockRetryBaseDelayMs,
+      maxDelayMs: this.config.bedrockRetryMaxDelayMs,
+      shouldRetry: isRetryableServiceError,
+      onRetry: (error, attempt, delayMs) => {
+        this.telemetry.event("bedrock_request_retry_scheduled", {
+          modelId: this.config.bedrockModelId,
+          attempt,
+          nextAttempt: attempt + 1,
+          delayMs,
+          ...getErrorAttributes(error)
+        });
+      }
+    });
     const content = response.output?.message?.content ?? [];
     return content.map((block) => block.text ?? "").join("\n").trim();
   }
