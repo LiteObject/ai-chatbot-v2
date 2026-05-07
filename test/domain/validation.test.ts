@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyAppSpec } from "../../src/domain/appSpec";
-import { getMissingFields, isReadyToBuild } from "../../src/domain/validation";
+import { getMissingFields, getRequiredFieldsForSpec, isReadyToBuild } from "../../src/domain/validation";
 
 describe("getMissingFields", () => {
   it("requires app type and purpose for an empty spec", () => {
@@ -29,5 +29,18 @@ describe("getMissingFields", () => {
 
     expect(getMissingFields(spec)).toEqual([]);
     expect(isReadyToBuild(spec)).toBe(true);
+  });
+});
+
+describe("getRequiredFieldsForSpec", () => {
+  it("requires app type and purpose before an app type is known", () => {
+    expect(getRequiredFieldsForSpec(createEmptyAppSpec())).toEqual(["appType", "purpose"]);
+  });
+
+  it("adds app-type-specific required fields", () => {
+    expect(getRequiredFieldsForSpec({
+      ...createEmptyAppSpec(),
+      appType: "workflow"
+    })).toEqual(["appType", "purpose", "targetUsers", "coreFeatures", "workflowSteps"]);
   });
 });

@@ -1,16 +1,47 @@
 const form = document.querySelector("#chatForm");
 const input = document.querySelector("#messageInput");
 const sendButton = document.querySelector("#sendButton");
+const sendButtonLabel = sendButton.querySelector("span");
 const messages = document.querySelector("#messages");
 const statusText = document.querySelector("#statusText");
 const specDetails = document.querySelector("#specDetails");
 const missingFields = document.querySelector("#missingFields");
+const missingCount = document.querySelector("#missingCount");
 const conversationIdBadge = document.querySelector("#conversationIdBadge");
 const contextWindowBadge = document.querySelector("#contextWindowBadge");
 const metricsSummary = document.querySelector("#metricsSummary");
 const metricsUpdatedAt = document.querySelector("#metricsUpdatedAt");
 const newConversationButton = document.querySelector("#newConversationButton");
 
+const suggestionPrompts = [
+  "An internal CRUD app for inventory tracking",
+  "A customer-facing portal for support tickets",
+  "A workflow approval app for expense reports",
+  "A dashboard for sales pipeline analytics"
+];
+
+const specIcons = {
+  appName: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg>',
+  purpose: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>',
+  appType: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h12"/></svg>',
+  deploymentTarget: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><circle cx="12" cy="9" r="3"/><path d="M3 21h18"/></svg>',
+  targetUsers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  coreFeatures: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 2.4 5 5.6.8-4 3.9 1 5.5L12 14.8 6.9 17.2l1-5.5-4-3.9 5.6-.8z"/></svg>',
+  dataEntities: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
+  integrations: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7a5 5 0 0 1 0-10h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/></svg>',
+  authRequired: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  workflowSteps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="m3 6 .8 .8L5.5 5"/><path d="m3 12 .8 .8 1.7-1.8"/><path d="m3 18 .8 .8 1.7-1.8"/></svg>'
+};
+
+const requiredFieldsByAppType = {
+  crud: ["purpose", "targetUsers", "dataEntities", "coreFeatures"],
+  dashboard: ["purpose", "targetUsers", "dataEntities", "coreFeatures"],
+  workflow: ["purpose", "targetUsers", "coreFeatures", "workflowSteps"],
+  chatbot: ["purpose", "targetUsers", "dataEntities"],
+  portal: ["purpose", "targetUsers", "coreFeatures", "authRequired"],
+  other: ["purpose", "targetUsers", "coreFeatures"]
+};
+const defaultRequiredFields = ["appType", "purpose"];
 const conversationKey = "app-builder-chatbot-conversation-id";
 const metricsRefreshIntervalMs = 5000;
 const defaultContextWindowMaxTokens = 200000;
@@ -29,6 +60,7 @@ let requestInFlight = false;
 let currentStatus = "collecting_requirements";
 let currentAppSpec = {};
 let currentMissingFields = [];
+let currentRequiredFields = [...defaultRequiredFields];
 
 localStorage.setItem(conversationKey, conversationId);
 conversationIdBadge.textContent = shortId(conversationId);
@@ -40,6 +72,19 @@ setInterval(loadMetrics, metricsRefreshIntervalMs);
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  await submitCurrentMessage();
+});
+
+input.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    submitCurrentMessage();
+  }
+});
+
+input.addEventListener("input", autoResizeTextarea);
+
+async function submitCurrentMessage() {
   if (!canSendMessage()) {
     input.focus();
     return;
@@ -53,6 +98,7 @@ form.addEventListener("submit", async (event) => {
   serverContextWindow = null;
   addMessage("user", text);
   input.value = "";
+  autoResizeTextarea();
   setLoading(true);
 
   try {
@@ -76,7 +122,12 @@ form.addEventListener("submit", async (event) => {
     setLoading(false);
     input.focus();
   }
-});
+}
+
+function autoResizeTextarea() {
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
+}
 
 newConversationButton.addEventListener("click", () => {
   conversationId = createConversationId();
@@ -161,7 +212,8 @@ function renderConversationState(state) {
   }
 
   setStatus(state.status);
-  renderSpec(state.appSpec || {});
+  const appSpec = state.appSpec || {};
+  renderSpec(appSpec, state.requiredFields);
   renderMissing(state.missingFields || []);
   renderContextWindow(state.contextWindow);
 }
@@ -170,9 +222,40 @@ function renderEmptyConversation() {
   serverContextWindow = null;
   messages.replaceChildren();
   setStatus("collecting_requirements");
-  renderSpec({});
+  renderSpec({}, defaultRequiredFields);
   renderMissing(null);
-  addMessage("assistant", "Tell me what kind of app you want to build.");
+  renderEmptyState();
+}
+
+function renderEmptyState() {
+  const wrap = document.createElement("div");
+  wrap.className = "empty-state";
+  wrap.innerHTML = `
+    <div class="empty-state-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    </div>
+    <h2>Tell me what kind of app you want to build</h2>
+    <p>Describe it in your own words, or pick a starting point below.</p>
+    <div class="suggestion-chips" role="list"></div>
+  `;
+  const chipContainer = wrap.querySelector(".suggestion-chips");
+  for (const prompt of suggestionPrompts) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "suggestion-chip";
+    chip.setAttribute("role", "listitem");
+    chip.textContent = prompt;
+    chip.addEventListener("click", () => {
+      input.value = prompt;
+      autoResizeTextarea();
+      input.focus();
+      submitCurrentMessage();
+    });
+    chipContainer.appendChild(chip);
+  }
+  messages.appendChild(wrap);
 }
 
 function setStatus(status) {
@@ -250,7 +333,8 @@ function estimateContextUsageTokens() {
     status: statusText.textContent,
     messages: messageContents,
     appSpec: currentAppSpec,
-    missingFields: currentMissingFields
+    missingFields: currentMissingFields,
+    requiredFields: currentRequiredFields
   };
 
   return estimateTokens(JSON.stringify(contextPayload));
@@ -295,6 +379,11 @@ function setLoading(isLoading) {
 function syncComposerState() {
   const disabled = requestInFlight || !canSendMessage();
   sendButton.disabled = disabled;
+  sendButton.dataset.loading = requestInFlight ? "true" : "false";
+  sendButton.setAttribute("aria-busy", requestInFlight ? "true" : "false");
+  if (sendButtonLabel) {
+    sendButtonLabel.textContent = requestInFlight ? "Waiting..." : "Send";
+  }
   input.disabled = disabled;
 }
 
@@ -303,39 +392,110 @@ function canSendMessage() {
 }
 
 function addMessage(role, content) {
+  const emptyState = messages.querySelector(".empty-state");
+  if (emptyState) emptyState.remove();
+
   const node = document.createElement("div");
   node.className = `message ${role}`;
-  node.textContent = content;
+
+  if (role !== "system") {
+    const avatar = document.createElement("span");
+    avatar.className = "message-avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.textContent = role === "user" ? "You" : "AB";
+    node.appendChild(avatar);
+  }
+
+  const bubble = document.createElement("div");
+  bubble.className = "message-bubble";
+  bubble.textContent = content;
+  node.appendChild(bubble);
+
   messages.appendChild(node);
   messages.scrollTop = messages.scrollHeight;
   updateContextWindowBadge();
 }
 
-function renderSpec(spec) {
+function renderSpec(spec, requiredFields = defaultRequiredFields) {
   currentAppSpec = spec;
+  currentRequiredFields = resolveRequiredFields(spec, requiredFields);
+  const requiredFieldSet = new Set(currentRequiredFields);
   const rows = [
-    ["Name", spec.appName],
-    ["Purpose", spec.purpose],
-    ["Type", spec.appType],
-    ["Target", spec.deploymentTarget],
-    ["Users", spec.targetUsers],
-    ["Features", spec.coreFeatures],
-    ["Entities", spec.dataEntities],
-    ["Integrations", spec.integrations],
-    ["Auth", formatBoolean(spec.authRequired)]
+    ["appName", "Name", spec.appName],
+    ["purpose", "Purpose", spec.purpose],
+    ["appType", "Type", spec.appType],
+    ["deploymentTarget", "Target", spec.deploymentTarget],
+    ["targetUsers", "Users", spec.targetUsers],
+    ["coreFeatures", "Features", spec.coreFeatures],
+    ["dataEntities", "Entities", spec.dataEntities],
+    ["workflowSteps", "Workflow", spec.workflowSteps],
+    ["integrations", "Integrations", spec.integrations],
+    ["authRequired", "Auth", formatBoolean(spec.authRequired)]
   ];
 
   specDetails.replaceChildren(
-    ...rows.flatMap(([label, value]) => {
+    ...rows.map(([key, label, value]) => {
+      const empty = isEmptySpecValue(value);
+      const isRequired = requiredFieldSet.has(key);
+      const row = document.createElement("div");
+      row.className = `spec-row ${empty ? "empty" : "filled"}${isRequired ? " required" : ""}`;
+
+      const icon = document.createElement("span");
+      icon.className = "spec-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = specIcons[key] || "";
+      icon.querySelector("svg")?.setAttribute("width", "16");
+      icon.querySelector("svg")?.setAttribute("height", "16");
+
       const term = document.createElement("dt");
-      term.textContent = label;
+      const labelText = document.createElement("span");
+      labelText.textContent = label;
+      term.appendChild(labelText);
+
+      if (isRequired) {
+        const marker = document.createElement("span");
+        marker.className = "required-marker";
+        marker.textContent = "*";
+        marker.title = "Required for this app type";
+        marker.setAttribute("aria-label", "required");
+        term.appendChild(marker);
+      }
+
       const description = document.createElement("dd");
-      description.textContent = formatValue(value);
-      description.className = isEmptySpecValue(value) ? "empty" : "filled";
-      return [term, description];
+      description.textContent = empty ? "Not set yet" : formatValue(value);
+
+      row.append(icon, term, description);
+      return row;
     })
   );
   updateContextWindowBadge();
+}
+
+function normalizeRequiredFields(fields) {
+  if (!Array.isArray(fields)) {
+    return [];
+  }
+
+  return fields.filter((field) => typeof field === "string" && field.length > 0);
+}
+
+function resolveRequiredFields(spec, fields) {
+  const resolved = new Set(defaultRequiredFields);
+
+  for (const field of getRequiredFieldsForAppType(spec?.appType)) {
+    resolved.add(field);
+  }
+
+  for (const field of normalizeRequiredFields(fields)) {
+    resolved.add(field);
+  }
+
+  return [...resolved];
+}
+
+function getRequiredFieldsForAppType(appType) {
+  const normalizedAppType = String(appType || "").trim().toLowerCase();
+  return requiredFieldsByAppType[normalizedAppType] || [];
 }
 
 function renderMissing(fields) {
@@ -346,6 +506,7 @@ function renderMissing(fields) {
     item.className = "muted";
     item.textContent = "Not evaluated";
     missingFields.replaceChildren(item);
+    if (missingCount) missingCount.textContent = "-";
     updateContextWindowBadge();
     return;
   }
@@ -353,8 +514,9 @@ function renderMissing(fields) {
   if (fields.length === 0) {
     const item = document.createElement("li");
     item.className = "complete";
-    item.textContent = "None";
+    item.textContent = "All set";
     missingFields.replaceChildren(item);
+    if (missingCount) missingCount.textContent = "0";
     updateContextWindowBadge();
     return;
   }
@@ -366,6 +528,7 @@ function renderMissing(fields) {
       return item;
     })
   );
+  if (missingCount) missingCount.textContent = String(fields.length);
   updateContextWindowBadge();
 }
 
@@ -419,7 +582,9 @@ function renderMetricsUnavailable() {
 
 function renderMetricRows(rows) {
   metricsSummary.replaceChildren(
-    ...rows.flatMap((row) => {
+    ...rows.map((row) => {
+      const wrap = document.createElement("div");
+      wrap.className = "metric-row";
       const term = document.createElement("dt");
       term.textContent = row.label;
       const description = document.createElement("dd");
@@ -427,7 +592,8 @@ function renderMetricRows(rows) {
       if (row.title) {
         description.title = row.title;
       }
-      return [term, description];
+      wrap.append(term, description);
+      return wrap;
     })
   );
 }

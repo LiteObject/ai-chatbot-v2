@@ -15,6 +15,18 @@ export function getRequiredFields(appType: AppType): AppSpecField[] {
   return requiredFields[appType];
 }
 
+export function getRequiredFieldsForSpec(spec: AppSpec): AppSpecField[] {
+  const fields = new Set<AppSpecField>(["appType", "purpose"]);
+
+  if (spec.appType) {
+    for (const field of getRequiredFields(spec.appType)) {
+      fields.add(field);
+    }
+  }
+
+  return [...fields];
+}
+
 export function getMissingFields(spec: AppSpec): AppSpecField[] {
   const missing = new Set<AppSpecField>();
 

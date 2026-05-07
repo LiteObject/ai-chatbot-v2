@@ -90,6 +90,7 @@ describe("handleChatTurn", () => {
 
     expect(response.status).toBe("collecting_requirements");
     expect(response.missingFields).toEqual(["targetUsers", "coreFeatures"]);
+    expect(response.requiredFields).toEqual(["appType", "purpose", "targetUsers", "dataEntities", "coreFeatures"]);
     expect(appBuilder.requests).toHaveLength(0);
   });
 

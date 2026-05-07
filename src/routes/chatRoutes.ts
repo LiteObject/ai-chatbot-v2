@@ -10,6 +10,7 @@ import type { ConversationState } from "../domain/conversationState";
 import type { LlmClient } from "../llm/llmClient";
 import { createCompositeTelemetry, createLoggerTelemetry, type Telemetry } from "../observability/telemetry";
 import type { ConversationRepository } from "../persistence/conversationRepository";
+import { getRequiredFieldsForSpec } from "../domain/validation";
 import { handleChatTurn } from "../workflow/handleChatTurn";
 
 const chatRequestSchema = z.object({
@@ -99,6 +100,7 @@ function serializeConversationState(state: ConversationState, contextWindow: Con
     messages: state.messages,
     appSpec: state.appSpec,
     missingFields: state.missingFields,
+    requiredFields: getRequiredFieldsForSpec(state.appSpec),
     contextWindow: getContextWindowUsage(state, contextWindow),
     createdApp: state.createdAppId && state.createdAppUrl ? {
       appId: state.createdAppId,

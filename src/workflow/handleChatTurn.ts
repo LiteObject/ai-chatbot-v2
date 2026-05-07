@@ -1,5 +1,5 @@
 import type { AppBuilderClient } from "../appBuilder/appBuilderClient";
-import { normalizePlatformDeploymentTarget, type AppSpec } from "../domain/appSpec";
+import { normalizePlatformDeploymentTarget, type AppSpec, type AppSpecField } from "../domain/appSpec";
 import { classifyConfirmationDeterministically, type ConfirmationDecision } from "../domain/confirmation";
 import {
   appendMessage,
@@ -16,7 +16,7 @@ import {
   type ContextWindowUsage
 } from "../domain/contextWindow";
 import { mergeAppSpec } from "../domain/mergeAppSpec";
-import { getMissingFields } from "../domain/validation";
+import { getMissingFields, getRequiredFieldsForSpec } from "../domain/validation";
 import type { LlmClient } from "../llm/llmClient";
 import { getErrorAttributes, noopTelemetry, type Telemetry } from "../observability/telemetry";
 import type { ConversationRepository } from "../persistence/conversationRepository";
@@ -40,6 +40,7 @@ export interface ChatTurnResponse {
   messages: ChatMessage[];
   appSpec: AppSpec;
   missingFields: string[];
+  requiredFields: AppSpecField[];
   contextWindow: ContextWindowUsage;
   createdApp?: {
     appId: string;
@@ -324,6 +325,7 @@ async function saveAndRespond(
     messages: state.messages,
     appSpec: state.appSpec,
     missingFields: state.missingFields,
+    requiredFields: getRequiredFieldsForSpec(state.appSpec),
     contextWindow: getContextWindowUsage(state, contextWindow),
     createdApp
   };

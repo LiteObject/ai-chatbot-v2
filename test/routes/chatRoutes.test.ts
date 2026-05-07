@@ -68,6 +68,7 @@ describe("chat routes", () => {
         coreFeatures: ["Survey completion"]
       },
       missingFields: [],
+      requiredFields: ["appType", "purpose", "targetUsers", "coreFeatures"],
       contextWindow: {
         status: "ok"
       }
