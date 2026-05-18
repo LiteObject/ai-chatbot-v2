@@ -1,4 +1,10 @@
-import type { AppBuilderClient, CreateAppResult } from "../appBuilder/appBuilderClient";
+import {
+  createAppRequestSchema,
+  createAppResultSchema,
+  type AppBuilderClient,
+  type CreateAppResult
+} from "../appBuilder/appBuilderClient";
+import { appSpecSchema } from "../domain/appSpec";
 import { getMissingFields } from "../domain/validation";
 import { getErrorAttributes, noopTelemetry, type Telemetry } from "../observability/telemetry";
 import type { AppCommandRecord, CreateAppCommand } from "./appCommand";
@@ -10,6 +16,7 @@ import {
   markAppCommandSucceeded
 } from "./appCommand";
 import type { AppCommandRepository } from "../persistence/appCommandRepository";
+import { redactSensitiveValue, type RedactionFinding } from "../privacy/redaction";
 import { isRetryableServiceError, type RetryOptions, withRetry } from "../reliability/retry";
 
 export type AppBuilderRetryOptions = Partial<Pick<RetryOptions, "attempts" | "baseDelayMs" | "maxDelayMs" | "shouldRetry" | "sleep">>;
@@ -35,22 +42,27 @@ export interface ExecuteCreateAppCommandResult {
 
 export async function executeCreateAppCommand(input: ExecuteCreateAppCommandInput): Promise<ExecuteCreateAppCommandResult> {
   const telemetry = input.telemetry ?? noopTelemetry;
-  const approval = input.command.approval;
-  let commandRecord = await getCommandRecord(input.command, input.commandRepository);
+  const commandAppSpecRedaction = redactSensitiveValue(input.command.appSpec);
+  const command = commandAppSpecRedaction.redacted
+    ? { ...input.command, appSpec: commandAppSpecRedaction.value }
+    : input.command;
+  emitRedactionTelemetry(telemetry, command, "app_command_app_spec", commandAppSpecRedaction.findings);
+  const approval = command.approval;
+  let commandRecord = await getCommandRecord(command, input.commandRepository);
 
   if (commandRecord.status === "succeeded" && commandRecord.result) {
     telemetry.event("app_command_idempotent_result_returned", {
-      commandId: input.command.id,
-      commandType: input.command.type,
-      idempotencyKey: input.command.idempotencyKey,
-      conversationId: input.command.conversationId,
+      commandId: command.id,
+      commandType: command.type,
+      idempotencyKey: command.idempotencyKey,
+      conversationId: command.conversationId,
       appId: commandRecord.result.appId
     });
     telemetry.metric("app_command_idempotent_replay_count", 1, {
-      conversationId: input.command.conversationId
+      conversationId: command.conversationId
     });
     return {
-      commandId: input.command.id,
+      commandId: command.id,
       result: commandRecord.result,
       latencyMs: 0,
       idempotentReplay: true
@@ -62,59 +74,77 @@ export async function executeCreateAppCommand(input: ExecuteCreateAppCommandInpu
     commandRecord = markAppCommandRejected(commandRecord, "missing_human_approval", error);
     await input.commandRepository?.save(commandRecord);
     telemetry.event("app_command_execution_rejected", {
-      commandId: input.command.id,
-      commandType: input.command.type,
-      conversationId: input.command.conversationId,
-      riskLevel: input.command.riskLevel,
+      commandId: command.id,
+      commandType: command.type,
+      conversationId: command.conversationId,
+      riskLevel: command.riskLevel,
       reason: "missing_human_approval"
     });
     throw error;
   }
 
-  const missingFields = getMissingFields(input.command.appSpec);
+  const appSpecValidation = appSpecSchema.safeParse(command.appSpec);
+
+  if (!appSpecValidation.success) {
+    const error = new Error("Cannot execute app creation with an invalid app spec.");
+    commandRecord = markAppCommandRejected(commandRecord, "invalid_app_spec", error);
+    await input.commandRepository?.save(commandRecord);
+    telemetry.event("app_command_execution_rejected", {
+      commandId: command.id,
+      commandType: command.type,
+      conversationId: command.conversationId,
+      riskLevel: command.riskLevel,
+      reason: "invalid_app_spec",
+      ...getErrorAttributes(appSpecValidation.error)
+    });
+    throw error;
+  }
+
+  const validatedAppSpec = appSpecValidation.data;
+  const missingFields = getMissingFields(validatedAppSpec);
 
   if (missingFields.length > 0) {
     const error = new Error(`Cannot execute app creation with missing fields: ${missingFields.join(", ")}`);
     commandRecord = markAppCommandRejected(commandRecord, "missing_fields", error);
     await input.commandRepository?.save(commandRecord);
     telemetry.event("app_command_execution_rejected", {
-      commandId: input.command.id,
-      commandType: input.command.type,
-      conversationId: input.command.conversationId,
-      riskLevel: input.command.riskLevel,
+      commandId: command.id,
+      commandType: command.type,
+      conversationId: command.conversationId,
+      riskLevel: command.riskLevel,
       reason: "missing_fields",
       missingFields
     });
     throw error;
   }
 
-  const lockAcquired = await input.commandRepository?.tryAcquireExecutionLock(input.command.id) ?? true;
+  const lockAcquired = await input.commandRepository?.tryAcquireExecutionLock(command.id) ?? true;
   if (!lockAcquired) {
     telemetry.event("app_command_execution_rejected", {
-      commandId: input.command.id,
-      commandType: input.command.type,
-      conversationId: input.command.conversationId,
-      riskLevel: input.command.riskLevel,
+      commandId: command.id,
+      commandType: command.type,
+      conversationId: command.conversationId,
+      riskLevel: command.riskLevel,
       reason: "already_executing"
     });
     throw new Error("Cannot execute app creation because the command is already executing.");
   }
 
   try {
-    commandRecord = await getCommandRecord(input.command, input.commandRepository);
+    commandRecord = await getCommandRecord(command, input.commandRepository);
     if (commandRecord.status === "succeeded" && commandRecord.result) {
       telemetry.event("app_command_idempotent_result_returned", {
-        commandId: input.command.id,
-        commandType: input.command.type,
-        idempotencyKey: input.command.idempotencyKey,
-        conversationId: input.command.conversationId,
+        commandId: command.id,
+        commandType: command.type,
+        idempotencyKey: command.idempotencyKey,
+        conversationId: command.conversationId,
         appId: commandRecord.result.appId
       });
       telemetry.metric("app_command_idempotent_replay_count", 1, {
-        conversationId: input.command.conversationId
+        conversationId: command.conversationId
       });
       return {
-        commandId: input.command.id,
+        commandId: command.id,
         result: commandRecord.result,
         latencyMs: 0,
         idempotentReplay: true
@@ -128,42 +158,46 @@ export async function executeCreateAppCommand(input: ExecuteCreateAppCommandInpu
       const attempt = commandRecord.attempts.at(-1);
       await input.commandRepository?.save(commandRecord);
       telemetry.event("app_command_execution_started", {
-        commandId: input.command.id,
-        commandType: input.command.type,
-        idempotencyKey: input.command.idempotencyKey,
-        conversationId: input.command.conversationId,
-        userId: input.command.requestedBy,
-        riskLevel: input.command.riskLevel,
+        commandId: command.id,
+        commandType: command.type,
+        idempotencyKey: command.idempotencyKey,
+        conversationId: command.conversationId,
+        userId: command.requestedBy,
+        riskLevel: command.riskLevel,
         approvalSource: approval.source,
         approvedBy: approval.approvedBy,
         attemptNumber: attempt?.attemptNumber,
-        appType: input.command.appSpec.appType ?? null
+        appType: validatedAppSpec.appType ?? null
       });
       telemetry.event("app_builder_call_started", {
-        commandId: input.command.id,
-        idempotencyKey: input.command.idempotencyKey,
-        conversationId: input.command.conversationId,
-        userId: input.command.requestedBy,
+        commandId: command.id,
+        idempotencyKey: command.idempotencyKey,
+        conversationId: command.conversationId,
+        userId: command.requestedBy,
         attemptNumber: attempt?.attemptNumber,
-        appType: input.command.appSpec.appType ?? null
+        appType: validatedAppSpec.appType ?? null
       });
 
       try {
-        const appBuilderResult = await input.appBuilder.createApp({
-          idempotencyKey: input.command.idempotencyKey,
-          conversationId: input.command.conversationId,
-          requestedBy: input.command.requestedBy,
-          appSpec: input.command.appSpec
+        const appBuilderRequest = createAppRequestSchema.parse({
+          idempotencyKey: command.idempotencyKey,
+          conversationId: command.conversationId,
+          requestedBy: command.requestedBy,
+          appSpec: validatedAppSpec
         });
+        const parsedAppBuilderResult = createAppResultSchema.parse(await input.appBuilder.createApp(appBuilderRequest));
+        const appBuilderResultRedaction = redactSensitiveValue(parsedAppBuilderResult);
+        emitRedactionTelemetry(telemetry, command, "app_builder_result", appBuilderResultRedaction.findings);
+        const appBuilderResult = appBuilderResultRedaction.value;
         const attemptLatencyMs = Date.now() - attemptStartedAt;
         commandRecord = markAppCommandSucceeded(commandRecord, appBuilderResult, attemptLatencyMs);
         await input.commandRepository?.save(commandRecord);
 
         telemetry.event("app_builder_call_completed", {
-          commandId: input.command.id,
-          idempotencyKey: input.command.idempotencyKey,
-          conversationId: input.command.conversationId,
-          userId: input.command.requestedBy,
+          commandId: command.id,
+          idempotencyKey: command.idempotencyKey,
+          conversationId: command.conversationId,
+          userId: command.requestedBy,
           appId: appBuilderResult.appId,
           attemptNumber: attempt?.attemptNumber,
           latencyMs: attemptLatencyMs
@@ -175,10 +209,10 @@ export async function executeCreateAppCommand(input: ExecuteCreateAppCommandInpu
         commandRecord = markAppCommandFailed(commandRecord, error, attemptLatencyMs);
         await input.commandRepository?.save(commandRecord);
         telemetry.event("app_builder_call_failed", {
-          commandId: input.command.id,
-          idempotencyKey: input.command.idempotencyKey,
-          conversationId: input.command.conversationId,
-          userId: input.command.requestedBy,
+          commandId: command.id,
+          idempotencyKey: command.idempotencyKey,
+          conversationId: command.conversationId,
+          userId: command.requestedBy,
           attemptNumber: attempt?.attemptNumber,
           latencyMs: attemptLatencyMs,
           ...getErrorAttributes(error)
@@ -186,53 +220,78 @@ export async function executeCreateAppCommand(input: ExecuteCreateAppCommandInpu
 
         throw error;
       }
-    }, getRetryOptions(input.retry, telemetry, input.command));
+    }, getRetryOptions(input.retry, telemetry, command));
 
     const latencyMs = Date.now() - executionStartedAt;
 
     telemetry.metric("app_creation_success_count", 1, {
-      conversationId: input.command.conversationId
+      conversationId: command.conversationId
     });
     telemetry.metric("app_builder_latency_ms", latencyMs, {
-      conversationId: input.command.conversationId
+      conversationId: command.conversationId
     });
     telemetry.event("app_command_execution_completed", {
-      commandId: input.command.id,
-      commandType: input.command.type,
-      idempotencyKey: input.command.idempotencyKey,
-      conversationId: input.command.conversationId,
+      commandId: command.id,
+      commandType: command.type,
+      idempotencyKey: command.idempotencyKey,
+      conversationId: command.conversationId,
       appId: result.appId,
       latencyMs,
       attemptCount: commandRecord.attempts.length
     });
 
     return {
-      commandId: input.command.id,
+      commandId: command.id,
       result,
       latencyMs,
       idempotentReplay: false
     };
   } catch (error) {
     telemetry.metric("app_creation_failure_count", 1, {
-      conversationId: input.command.conversationId
+      conversationId: command.conversationId
     });
     telemetry.event("app_command_execution_failed", {
-      commandId: input.command.id,
-      commandType: input.command.type,
-      idempotencyKey: input.command.idempotencyKey,
-      conversationId: input.command.conversationId,
+      commandId: command.id,
+      commandType: command.type,
+      idempotencyKey: command.idempotencyKey,
+      conversationId: command.conversationId,
       attemptCount: commandRecord.attempts.length,
       ...getErrorAttributes(error)
     });
     throw error;
   } finally {
-    await input.commandRepository?.releaseExecutionLock(input.command.id);
+    await input.commandRepository?.releaseExecutionLock(command.id);
   }
 }
 
 async function getCommandRecord(command: CreateAppCommand, repository: AppCommandRepository | undefined): Promise<AppCommandRecord> {
   const savedRecord = await repository?.get(command.id);
-  return savedRecord ?? createPlannedAppCommandRecord(command);
+  return savedRecord ? redactSensitiveValue(savedRecord).value : createPlannedAppCommandRecord(command);
+}
+
+function emitRedactionTelemetry(
+  telemetry: Telemetry,
+  command: CreateAppCommand,
+  boundary: string,
+  findings: RedactionFinding[]
+): void {
+  if (findings.length === 0) {
+    return;
+  }
+
+  const redactionCount = findings.reduce((total, finding) => total + finding.count, 0);
+  telemetry.event("sensitive_data_redacted", {
+    commandId: command.id,
+    commandType: command.type,
+    conversationId: command.conversationId,
+    userId: command.requestedBy,
+    boundary,
+    findingTypes: findings.map((finding) => finding.type)
+  });
+  telemetry.metric("sensitive_data_redaction_count", redactionCount, {
+    conversationId: command.conversationId,
+    boundary
+  });
 }
 
 function getRetryOptions(

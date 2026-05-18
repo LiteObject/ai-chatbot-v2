@@ -1,17 +1,23 @@
-import type { AppSpec } from "../domain/appSpec";
+import { z } from "zod";
+import { appSpecSchema } from "../domain/appSpec";
 
-export interface CreateAppRequest {
-  idempotencyKey: string;
-  conversationId: string;
-  requestedBy: string | null;
-  appSpec: AppSpec;
-}
+const appBuilderStringSchema = z.string().trim().min(1).max(500);
 
-export interface CreateAppResult {
-  status: "created";
-  appId: string;
-  url: string;
-}
+export const createAppRequestSchema = z.object({
+  idempotencyKey: appBuilderStringSchema,
+  conversationId: appBuilderStringSchema,
+  requestedBy: appBuilderStringSchema.optional().nullable(),
+  appSpec: appSpecSchema
+}).strict();
+
+export const createAppResultSchema = z.object({
+  status: z.literal("created"),
+  appId: appBuilderStringSchema,
+  url: z.string().trim().url().max(2000)
+}).strict();
+
+export type CreateAppRequest = z.infer<typeof createAppRequestSchema>;
+export type CreateAppResult = z.infer<typeof createAppResultSchema>;
 
 export interface AppBuilderClient {
   createApp(request: CreateAppRequest): Promise<CreateAppResult>;

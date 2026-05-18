@@ -2,6 +2,7 @@ import type { AppSpec } from "../domain/appSpec";
 import type { ConversationState } from "../domain/conversationState";
 import { getMissingFields } from "../domain/validation";
 import type { CreateAppResult } from "../appBuilder/appBuilderClient";
+import { redactSensitiveText } from "../privacy/redaction";
 import { createHash } from "node:crypto";
 
 export type AppCommandRiskLevel = "high";
@@ -254,12 +255,12 @@ function getAppCommandError(error: unknown): AppCommandError {
   if (error instanceof Error) {
     return {
       errorName: error.name,
-      errorMessage: error.message
+      errorMessage: redactSensitiveText(error.message).value
     };
   }
 
   return {
     errorName: "UnknownError",
-    errorMessage: String(error)
+    errorMessage: redactSensitiveText(String(error)).value
   };
 }

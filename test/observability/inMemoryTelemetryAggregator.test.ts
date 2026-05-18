@@ -18,6 +18,8 @@ describe("InMemoryTelemetryAggregator", () => {
     telemetry.metric("app_creation_success_count", 1, { conversationId: "conv_1" });
     telemetry.metric("app_creation_failure_count", 1, { conversationId: "conv_2" });
     telemetry.metric("app_builder_latency_ms", 150, { conversationId: "conv_1" });
+    telemetry.metric("sensitive_data_redaction_count", 2, { boundary: "user_message" });
+    telemetry.metric("sensitive_data_redaction_count", 1, { boundary: "app_builder_result" });
 
     expect(telemetry.snapshot()).toMatchObject({
       turns: {
@@ -58,6 +60,13 @@ describe("InMemoryTelemetryAggregator", () => {
           averageMs: 150,
           maxMs: 150,
           lastMs: 150
+        }
+      },
+      privacy: {
+        redactions: 3,
+        byBoundary: {
+          user_message: 2,
+          app_builder_result: 1
         }
       }
     });

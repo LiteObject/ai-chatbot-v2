@@ -1,5 +1,11 @@
 import type { AppBuilderClient } from "../appBuilder/appBuilderClient";
-import { normalizePlatformDeploymentTarget, type AppSpec, type AppSpecField } from "../domain/appSpec";
+import {
+  normalizePlatformDeploymentTarget,
+  partialAppSpecSchema,
+  type AppSpec,
+  type AppSpecField,
+  type PartialAppSpec
+} from "../domain/appSpec";
 import { classifyConfirmationDeterministically } from "../domain/confirmation";
 import {
   appendMessage,
@@ -23,6 +29,7 @@ import { getErrorAttributes, noopTelemetry, type Telemetry } from "../observabil
 import type { AppCommandRepository } from "../persistence/appCommandRepository";
 import type { ConversationRepository } from "../persistence/conversationRepository";
 import type { UserPreferencesRepository } from "../persistence/userPreferencesRepository";
+import { redactSensitiveText, redactSensitiveValue, type RedactionFinding } from "../privacy/redaction";
 import { createPlannedAppCommandRecord, planCreateAppCommand, type AppCommandRecord } from "./appCommand";
 import { executeCreateAppCommand, type AppBuilderRetryOptions } from "./appCommandExecutor";
 
@@ -81,10 +88,13 @@ async function handleChatTurnInternal(
   telemetry: Telemetry,
   startedAt: number
 ): Promise<ChatTurnResponse> {
-  const existingState = await input.repository.get(input.conversationId);
-  const state = existingState ?? createConversationState(input.conversationId, input.userId);
-  const contextWindow = input.contextWindow ?? defaultContextWindowOptions;
-  state.userId = input.userId ?? state.userId ?? null;
+  const messageRedaction = redactSensitiveText(input.message);
+  const safeInput = messageRedaction.redacted ? { ...input, message: messageRedaction.value } : input;
+  const existingState = await safeInput.repository.get(safeInput.conversationId);
+  const state = existingState ?? createConversationState(safeInput.conversationId, safeInput.userId);
+  const contextWindow = safeInput.contextWindow ?? defaultContextWindowOptions;
+  state.userId = safeInput.userId ?? state.userId ?? null;
+  emitRedactionTelemetry(telemetry, state.conversationId, state.userId, "user_message", messageRedaction.findings);
   telemetry.event("chat_turn_started", {
     conversationId: state.conversationId,
     userId: state.userId ?? null,
@@ -96,18 +106,18 @@ async function handleChatTurnInternal(
       conversationId: state.conversationId
     });
   }
-  appendMessage(state, "user", input.message);
+  appendMessage(state, "user", safeInput.message);
   compactConversationForContext(state, contextWindow);
 
   if (state.status === "awaiting_confirmation") {
-    return handleConfirmationTurn(state, input, contextWindow, telemetry, startedAt);
+    return handleConfirmationTurn(state, safeInput, contextWindow, telemetry, startedAt);
   }
 
   if (state.status === "created") {
-    return saveAndRespond(input, state, getCreatedConversationResponse(input.message, state), contextWindow, telemetry, startedAt);
+    return saveAndRespond(safeInput, state, getCreatedConversationResponse(safeInput.message, state), contextWindow, telemetry, startedAt);
   }
 
-  return handleRequirementCollectionTurn(state, input, contextWindow, telemetry, startedAt);
+  return handleRequirementCollectionTurn(state, safeInput, contextWindow, telemetry, startedAt);
 }
 
 async function handleRequirementCollectionTurn(
@@ -326,9 +336,9 @@ async function extractRequirements(
     missingFields: state.missingFields
   });
 
-  let extracted: Partial<AppSpec>;
+  let rawExtracted: unknown;
   try {
-    extracted = await input.llmClient.extractAppSpec({
+    rawExtracted = await input.llmClient.extractAppSpec({
       userMessage: input.message,
       currentSpec: state.appSpec,
       missingFields: state.missingFields
@@ -346,7 +356,10 @@ async function extractRequirements(
     throw error;
   }
 
-  extracted = addDeterministicExtraction(input.message, extracted);
+  const extracted = addDeterministicExtraction(
+    input.message,
+    validateExtractedRequirements(rawExtracted, state, telemetry)
+  );
 
   telemetry.event("requirement_extraction_completed", {
     conversationId: state.conversationId,
@@ -355,6 +368,31 @@ async function extractRequirements(
   });
 
   return extracted;
+}
+
+function validateExtractedRequirements(
+  rawExtracted: unknown,
+  state: ConversationState,
+  telemetry: Telemetry
+): PartialAppSpec {
+  const parsed = partialAppSpecSchema.safeParse(rawExtracted);
+
+  if (parsed.success) {
+    const redacted = redactSensitiveValue(parsed.data);
+    emitRedactionTelemetry(telemetry, state.conversationId, state.userId, "llm_extraction", redacted.findings);
+    return redacted.value;
+  }
+
+  telemetry.event("llm_extracted_requirements_rejected", {
+    conversationId: state.conversationId,
+    userId: state.userId ?? null,
+    ...getErrorAttributes(parsed.error)
+  });
+  telemetry.metric("llm_extracted_requirements_rejected_count", 1, {
+    conversationId: state.conversationId
+  });
+
+  return {};
 }
 
 async function saveAndRespond(
@@ -366,7 +404,10 @@ async function saveAndRespond(
   startedAt: number,
   createdApp?: ChatTurnResponse["createdApp"]
 ): Promise<ChatTurnResponse> {
-  appendMessage(state, "assistant", message);
+  const messageRedaction = redactSensitiveText(message);
+  const safeMessage = messageRedaction.value;
+  emitRedactionTelemetry(telemetry, state.conversationId, state.userId, "assistant_message", messageRedaction.findings);
+  appendMessage(state, "assistant", safeMessage);
   compactConversationForContext(state, contextWindow);
   const userPreferences = await saveUserPreferences(input.userPreferencesRepository, state);
   await input.repository.save(state);
@@ -387,7 +428,7 @@ async function saveAndRespond(
   return {
     conversationId: state.conversationId,
     status: state.status,
-    message,
+    message: safeMessage,
     messages: state.messages,
     appSpec: state.appSpec,
     missingFields: state.missingFields,
@@ -397,6 +438,30 @@ async function saveAndRespond(
     userPreferences,
     commands
   };
+}
+
+function emitRedactionTelemetry(
+  telemetry: Telemetry,
+  conversationId: string,
+  userId: string | null | undefined,
+  boundary: string,
+  findings: RedactionFinding[]
+): void {
+  if (findings.length === 0) {
+    return;
+  }
+
+  const redactionCount = findings.reduce((total, finding) => total + finding.count, 0);
+  telemetry.event("sensitive_data_redacted", {
+    conversationId,
+    userId: userId ?? null,
+    boundary,
+    findingTypes: findings.map((finding) => finding.type)
+  });
+  telemetry.metric("sensitive_data_redaction_count", redactionCount, {
+    conversationId,
+    boundary
+  });
 }
 
 async function saveUserPreferences(
@@ -417,7 +482,7 @@ function getContextLimitMessage(): string {
   return "This conversation has reached the configured context limit, so I paused new requirement extraction to avoid dropping context. Your current spec is saved; start a new conversation or increase the context window setting before continuing.";
 }
 
-function addDeterministicExtraction(message: string, extracted: Partial<AppSpec>): Partial<AppSpec> {
+function addDeterministicExtraction(message: string, extracted: PartialAppSpec): PartialAppSpec {
   const deploymentTarget = normalizePlatformDeploymentTarget(message);
   const authRequired = getDeterministicAuthRequirement(message);
   const authIntegrations = getDeterministicAuthIntegrations(message);

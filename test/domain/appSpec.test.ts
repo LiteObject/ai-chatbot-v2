@@ -20,4 +20,19 @@ describe("partialAppSpecSchema", () => {
       appType: "other"
     });
   });
+
+  it("rejects model-invented fields", () => {
+    expect(() => partialAppSpecSchema.parse({
+      purpose: "manage employees",
+      unexpectedAction: "create the app now"
+    })).toThrow();
+  });
+
+  it("rejects oversized list output", () => {
+    const tooManyUsers = [...Array(26).keys()].map((index) => `user group ${index}`);
+
+    expect(() => partialAppSpecSchema.parse({
+      targetUsers: tooManyUsers
+    })).toThrow();
+  });
 });

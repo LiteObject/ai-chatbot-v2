@@ -4,8 +4,11 @@ export const appTypes = ["dashboard", "workflow", "crud", "chatbot", "portal", "
 export type AppType = (typeof appTypes)[number];
 
 const appTypeSchema = z.enum(appTypes);
-const stringFieldSchema = z.string().trim().min(1);
-const stringListSchema = z.array(stringFieldSchema);
+const maxStringFieldLength = 500;
+const maxListItems = 25;
+const stringFieldSchema = z.string().trim().min(1).max(maxStringFieldLength);
+const rawStringFieldSchema = z.string().trim().max(maxStringFieldLength);
+const stringListSchema = z.array(stringFieldSchema).max(maxListItems);
 
 const strictPartialAppSpecSchema = z.object({
   appName: stringFieldSchema.optional().nullable(),
@@ -22,24 +25,24 @@ const strictPartialAppSpecSchema = z.object({
   reportingNeeds: stringListSchema.optional(),
   workflowSteps: stringListSchema.optional(),
   notes: stringListSchema.optional()
-});
+}).strict();
 
 const rawPartialAppSpecSchema = z.object({
-  appName: z.string().trim().optional().nullable(),
-  purpose: z.string().trim().optional().nullable(),
-  appType: z.string().trim().optional().nullable(),
+  appName: rawStringFieldSchema.optional().nullable(),
+  purpose: rawStringFieldSchema.optional().nullable(),
+  appType: rawStringFieldSchema.optional().nullable(),
   targetUsers: stringListSchema.optional(),
   coreFeatures: stringListSchema.optional(),
   dataEntities: stringListSchema.optional(),
   integrations: stringListSchema.optional(),
   authRequired: z.boolean().optional().nullable(),
-  deploymentTarget: z.string().trim().optional().nullable(),
+  deploymentTarget: rawStringFieldSchema.optional().nullable(),
   roles: stringListSchema.optional(),
   permissions: stringListSchema.optional(),
   reportingNeeds: stringListSchema.optional(),
   workflowSteps: stringListSchema.optional(),
   notes: stringListSchema.optional()
-});
+}).strict();
 
 export const appSpecSchema = z.object({
   appName: stringFieldSchema.optional().nullable(),
@@ -56,7 +59,7 @@ export const appSpecSchema = z.object({
   reportingNeeds: stringListSchema.default([]),
   workflowSteps: stringListSchema.default([]),
   notes: stringListSchema.default([])
-});
+}).strict();
 
 export const partialAppSpecSchema = rawPartialAppSpecSchema.transform(normalizePartialAppSpec);
 

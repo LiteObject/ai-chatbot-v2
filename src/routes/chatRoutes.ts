@@ -9,23 +9,26 @@ import {
 import type { ConversationState } from "../domain/conversationState";
 import type { UserPreferences } from "../domain/userPreferences";
 import type { LlmClient } from "../llm/llmClient";
-import { createCompositeTelemetry, createLoggerTelemetry, type Telemetry } from "../observability/telemetry";
+import { createCompositeTelemetry, createLoggerTelemetry, getErrorAttributes, type Telemetry } from "../observability/telemetry";
 import type { AppCommandRepository } from "../persistence/appCommandRepository";
 import type { ConversationRepository } from "../persistence/conversationRepository";
 import type { UserPreferencesRepository } from "../persistence/userPreferencesRepository";
+import { redactSensitiveValue } from "../privacy/redaction";
 import { getRequiredFieldsForSpec } from "../domain/validation";
 import type { AppCommandRecord } from "../workflow/appCommand";
 import { handleChatTurn } from "../workflow/handleChatTurn";
 
+const routeIdSchema = z.string().trim().min(1).max(200);
+
 const chatRequestSchema = z.object({
-  conversationId: z.string().min(1),
-  userId: z.string().min(1).optional().nullable(),
-  message: z.string().trim().min(1)
-});
+  conversationId: routeIdSchema,
+  userId: routeIdSchema.optional().nullable(),
+  message: z.string().trim().min(1).max(8000)
+}).strict();
 
 const conversationParamsSchema = z.object({
-  conversationId: z.string().min(1)
-});
+  conversationId: routeIdSchema
+}).strict();
 
 export interface ChatRouteDependencies {
   repository: ConversationRepository;
@@ -54,7 +57,7 @@ export async function registerChatRoutes(server: FastifyInstance, dependencies: 
     try {
       state = await dependencies.repository.get(parsed.data.conversationId);
     } catch (error) {
-      request.log.error({ err: error, conversationId: parsed.data.conversationId }, "Conversation load failed");
+      request.log.error({ error: getErrorAttributes(error), conversationId: parsed.data.conversationId }, "Conversation load failed");
       return reply.code(500).send({ error: "The conversation could not be loaded." });
     }
 
@@ -100,7 +103,7 @@ export async function registerChatRoutes(server: FastifyInstance, dependencies: 
 
       return reply.send(response);
     } catch (error) {
-      request.log.error({ err: error, conversationId: parsed.data.conversationId, userId: parsed.data.userId ?? null }, "Chat turn failed");
+      request.log.error({ error: getErrorAttributes(error), conversationId: parsed.data.conversationId, userId: parsed.data.userId ?? null }, "Chat turn failed");
       return reply.code(500).send({
         error: "The chatbot could not process the message."
       });
@@ -114,19 +117,23 @@ function serializeConversationState(
   userPreferences?: UserPreferences,
   commands?: AppCommandRecord[]
 ) {
+  const safeState = redactSensitiveValue(state).value;
+  const safeUserPreferences = userPreferences ? redactSensitiveValue(userPreferences).value : undefined;
+  const safeCommands = commands ? redactSensitiveValue(commands).value : undefined;
+
   return {
-    conversationId: state.conversationId,
-    status: state.status,
-    messages: state.messages,
-    appSpec: state.appSpec,
-    missingFields: state.missingFields,
-    requiredFields: getRequiredFieldsForSpec(state.appSpec),
-    contextWindow: getContextWindowUsage(state, contextWindow),
-    createdApp: state.createdAppId && state.createdAppUrl ? {
-      appId: state.createdAppId,
-      url: state.createdAppUrl
+    conversationId: safeState.conversationId,
+    status: safeState.status,
+    messages: safeState.messages,
+    appSpec: safeState.appSpec,
+    missingFields: safeState.missingFields,
+    requiredFields: getRequiredFieldsForSpec(safeState.appSpec),
+    contextWindow: getContextWindowUsage(safeState, contextWindow),
+    createdApp: safeState.createdAppId && safeState.createdAppUrl ? {
+      appId: safeState.createdAppId,
+      url: safeState.createdAppUrl
     } : undefined,
-    userPreferences,
-    commands
+    userPreferences: safeUserPreferences,
+    commands: safeCommands
   };
 }

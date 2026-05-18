@@ -4,6 +4,7 @@ import { MockAppBuilderClient } from "../../src/appBuilder/mockAppBuilderClient"
 import type { PartialAppSpec } from "../../src/domain/appSpec";
 import type {
   ClarifyingQuestionInput,
+  ExtractAppSpecInput,
   LlmClient
 } from "../../src/llm/llmClient";
 import type { Telemetry, TelemetryAttributes } from "../../src/observability/telemetry";
@@ -34,6 +35,33 @@ class StubLlmClient implements LlmClient {
 class ThrowingExtractionLlmClient extends StubLlmClient {
   override async extractAppSpec(): Promise<PartialAppSpec> {
     throw new Error("bedrock unavailable");
+  }
+}
+
+class InvalidExtractionLlmClient extends StubLlmClient {
+  constructor() {
+    super([]);
+  }
+
+  override async extractAppSpec(): Promise<PartialAppSpec> {
+    this.extractCalls += 1;
+    return {
+      purpose: "manage employees",
+      appType: "crud",
+      targetUsers: ["HR admins"],
+      dataEntities: ["employee"],
+      coreFeatures: ["create employees"],
+      unexpectedAction: "create the app now"
+    } as PartialAppSpec;
+  }
+}
+
+class RecordingInputLlmClient extends StubLlmClient {
+  readonly extractInputs: ExtractAppSpecInput[] = [];
+
+  override async extractAppSpec(input: ExtractAppSpecInput): Promise<PartialAppSpec> {
+    this.extractInputs.push(structuredClone(input));
+    return super.extractAppSpec();
   }
 }
 
@@ -109,6 +137,69 @@ describe("handleChatTurn", () => {
     expect(response.message).toContain("I'm doing well");
     expect(response.message).not.toContain("Missing:");
     expect(response.missingFields).toEqual(["appType", "purpose"]);
+    expect(appBuilder.requests).toHaveLength(0);
+  });
+
+  it("rejects invalid LLM extraction output before merging requirements", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new InvalidExtractionLlmClient();
+    const telemetry = new RecordingTelemetry();
+
+    const response = await handleChatTurn({
+      conversationId: "conv_invalid_extraction",
+      userId: "user_1",
+      message: "Build an employee manager for HR admins.",
+      repository,
+      llmClient,
+      appBuilder,
+      telemetry
+    });
+
+    expect(response.status).toBe("collecting_requirements");
+    expect(response.appSpec.purpose).toBeUndefined();
+    expect(response.missingFields).toEqual(["appType", "purpose"]);
+    expect(response.message).toBe("Missing: appType, purpose");
+    expect(appBuilder.requests).toHaveLength(0);
+    expect(telemetry.events.map((event) => event.name)).toContain("llm_extracted_requirements_rejected");
+  });
+
+  it("redacts sensitive data before model calls, state storage, and responses", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new RecordingInputLlmClient([
+      {
+        purpose: "manage employee records with apiKey=super-secret-123",
+        appType: "crud",
+        targetUsers: ["admin@example.com"],
+        dataEntities: ["employee"],
+        coreFeatures: ["create employees"]
+      }
+    ]);
+    const telemetry = new RecordingTelemetry();
+
+    const response = await handleChatTurn({
+      conversationId: "conv_redaction",
+      userId: "user_1",
+      message: "Build an employee app for admin@example.com with apiKey=super-secret-123.",
+      repository,
+      llmClient,
+      appBuilder,
+      telemetry
+    });
+    const saved = await repository.get("conv_redaction");
+    const serializedResponse = JSON.stringify(response);
+    const serializedSavedState = JSON.stringify(saved);
+
+    expect(llmClient.extractInputs[0]?.userMessage).toContain("[REDACTED:email]");
+    expect(llmClient.extractInputs[0]?.userMessage).toContain("apiKey=[REDACTED:labeled_secret]");
+    expect(serializedResponse).not.toContain("admin@example.com");
+    expect(serializedResponse).not.toContain("super-secret-123");
+    expect(serializedSavedState).not.toContain("admin@example.com");
+    expect(serializedSavedState).not.toContain("super-secret-123");
+    expect(response.appSpec.purpose).toContain("apiKey=[REDACTED:labeled_secret]");
+    expect(response.appSpec.targetUsers).toEqual(["[REDACTED:email]"]);
+    expect(telemetry.events.map((event) => event.name)).toContain("sensitive_data_redacted");
     expect(appBuilder.requests).toHaveLength(0);
   });
 

@@ -35,6 +35,10 @@ export interface MetricsSnapshot {
     total: number;
     latencyMs: LatencyMetricsSnapshot;
   };
+  privacy: {
+    redactions: number;
+    byBoundary: Record<string, number>;
+  };
 }
 
 export interface MetricsSnapshotProvider {
@@ -68,6 +72,8 @@ export class InMemoryTelemetryAggregator implements Telemetry, MetricsSnapshotPr
   private appCreationSuccess = 0;
   private appCreationFailure = 0;
   private readonly appBuilderLatency: LatencyAccumulator = createLatencyAccumulator();
+  private privacyRedactions = 0;
+  private readonly redactionsByBoundary: Record<string, number> = {};
 
   event(name: string, attributes: TelemetryAttributes = {}): void {
     this.touch();
@@ -135,6 +141,12 @@ export class InMemoryTelemetryAggregator implements Telemetry, MetricsSnapshotPr
 
     if (name === "app_builder_latency_ms") {
       addLatency(this.appBuilderLatency, value);
+      return;
+    }
+
+    if (name === "sensitive_data_redaction_count") {
+      this.privacyRedactions += countValue;
+      incrementRecord(this.redactionsByBoundary, getStringAttribute(attributes, "boundary", "unknown"), countValue);
     }
   }
 
@@ -170,6 +182,10 @@ export class InMemoryTelemetryAggregator implements Telemetry, MetricsSnapshotPr
         failure: this.appCreationFailure,
         total: appCreationTotal,
         latencyMs: summarizeLatency(this.appBuilderLatency)
+      },
+      privacy: {
+        redactions: this.privacyRedactions,
+        byBoundary: { ...this.redactionsByBoundary }
       }
     };
   }

@@ -103,6 +103,48 @@ describe("chat routes", () => {
     });
   });
 
+  it("redacts sensitive values from saved conversation responses", async () => {
+    const server = fastify();
+    const repository = new InMemoryConversationRepository();
+    const commandRepository = new InMemoryAppCommandRepository();
+    const state = createConversationState("conv_sensitive", "user_1");
+
+    state.status = "awaiting_confirmation";
+    state.appSpec = {
+      ...state.appSpec,
+      purpose: "Call legacy API with apiKey=super-secret-123",
+      appType: "other",
+      targetUsers: ["admin@example.com"],
+      coreFeatures: ["API lookup"]
+    };
+    state.missingFields = [];
+    appendMessage(state, "user", "Use token=secret-token-123 for admin@example.com");
+    await repository.save(state);
+    await commandRepository.save(createPlannedAppCommandRecord(createCommand(state)));
+
+    await registerChatRoutes(server, {
+      repository,
+      commandRepository,
+      llmClient,
+      appBuilder
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "/api/conversations/conv_sensitive"
+    });
+    const body = response.json();
+    const serializedBody = JSON.stringify(body);
+
+    expect(response.statusCode).toBe(200);
+    expect(serializedBody).toContain("[REDACTED:email]");
+    expect(serializedBody).toContain("apiKey=[REDACTED:labeled_secret]");
+    expect(serializedBody).toContain("token=[REDACTED:labeled_secret]");
+    expect(serializedBody).not.toContain("admin@example.com");
+    expect(serializedBody).not.toContain("super-secret-123");
+    expect(serializedBody).not.toContain("secret-token-123");
+  });
+
   it("returns 404 for unknown conversations", async () => {
     const server = fastify();
     const repository = new InMemoryConversationRepository();
@@ -115,6 +157,29 @@ describe("chat routes", () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+
+  it("rejects chat requests with unexpected fields", async () => {
+    const server = fastify();
+    const repository = new InMemoryConversationRepository();
+
+    await registerChatRoutes(server, { repository, llmClient, appBuilder });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        conversationId: "conv_1",
+        userId: "user_1",
+        message: "Build an app.",
+        createNow: true
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Invalid chat request."
+    });
   });
 });
 
