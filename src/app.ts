@@ -3,7 +3,7 @@ import type { AppBuilderClient } from "./appBuilder/appBuilderClient";
 import { MockAppBuilderClient } from "./appBuilder/mockAppBuilderClient";
 import type { AppConfig } from "./config";
 import type { ContextWindowOptions } from "./domain/contextWindow";
-import { BedrockLlmClient } from "./llm/bedrockLlmClient";
+import { OllamaLlmClient } from "./llm/ollamaLlmClient";
 import type { LlmClient } from "./llm/llmClient";
 import { InMemoryTelemetryAggregator } from "./observability/inMemoryTelemetryAggregator";
 import { createLoggerOptions } from "./observability/logger";
@@ -36,12 +36,12 @@ export async function buildApp(options: BuildAppOptions) {
   const commandRepository = options.commandRepository ?? new InMemoryAppCommandRepository();
   const metrics = options.metrics ?? new InMemoryTelemetryAggregator();
   const telemetry = createCompositeTelemetry(createLoggerTelemetry(server.log), metrics);
-  const llmClient = options.llmClient ?? new BedrockLlmClient(options.config, telemetry);
+  const llmClient = options.llmClient ?? new OllamaLlmClient(options.config, telemetry);
   const appBuilder = options.appBuilder ?? new MockAppBuilderClient();
   const contextWindow: ContextWindowOptions = {
-    maxTokens: options.config.bedrockContextWindowTokens,
-    warningRatio: options.config.bedrockContextWindowWarningRatio,
-    blockRatio: options.config.bedrockContextWindowBlockRatio
+    maxTokens: options.config.ollamaContextWindowTokens,
+    warningRatio: options.config.ollamaContextWindowWarningRatio,
+    blockRatio: options.config.ollamaContextWindowBlockRatio
   };
 
   server.get("/health", async () => ({ status: "ok" }));

@@ -16,7 +16,7 @@ import { handleChatTurn } from "../../src/workflow/handleChatTurn";
 class StubLlmClient implements LlmClient {
   extractCalls = 0;
 
-  constructor(private readonly extractions: PartialAppSpec[]) {}
+  constructor(private readonly extractions: PartialAppSpec[]) { }
 
   async extractAppSpec(): Promise<PartialAppSpec> {
     this.extractCalls += 1;
@@ -34,7 +34,7 @@ class StubLlmClient implements LlmClient {
 
 class ThrowingExtractionLlmClient extends StubLlmClient {
   override async extractAppSpec(): Promise<PartialAppSpec> {
-    throw new Error("bedrock unavailable");
+    throw new Error("ollama unavailable");
   }
 }
 
@@ -150,6 +150,52 @@ describe("handleChatTurn", () => {
     expect(response.message).not.toContain("Missing:");
     expect(response.missingFields).toEqual(["appType", "purpose"]);
     expect(appBuilder.requests).toHaveLength(0);
+  });
+
+  it("answers pure greetings without requiring an LLM extraction", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new ThrowingExtractionLlmClient([]);
+
+    const response = await handleChatTurn({
+      conversationId: "conv_greeting",
+      userId: "user_1",
+      message: "hello",
+      repository,
+      llmClient,
+      appBuilder
+    });
+
+    expect(response.status).toBe("collecting_requirements");
+    expect(response.message).toBe("Hi. Tell me what kind of app you want to build and what problem it should solve.");
+    expect(response.missingFields).toEqual(["appType", "purpose"]);
+    expect(appBuilder.requests).toHaveLength(0);
+  });
+
+  it("still extracts requirements when a greeting also includes app details", async () => {
+    const repository = new InMemoryConversationRepository();
+    const appBuilder = new MockAppBuilderClient();
+    const llmClient = new RecordingInputLlmClient([
+      {
+        purpose: "sales pipeline",
+        appType: "crud",
+        dataEntities: ["lead", "deal"]
+      }
+    ]);
+
+    const response = await handleChatTurn({
+      conversationId: "conv_greeting_with_requirements",
+      userId: "user_1",
+      message: "Hi, build me a sales app.",
+      repository,
+      llmClient,
+      appBuilder
+    });
+
+    expect(llmClient.extractCalls).toBe(1);
+    expect(llmClient.extractInputs[0]?.userMessage).toBe("Hi, build me a sales app.");
+    expect(response.status).toBe("collecting_requirements");
+    expect(response.message).toBe("Missing: targetUsers, coreFeatures");
   });
 
   it("rejects invalid LLM extraction output before merging requirements", async () => {
@@ -977,7 +1023,7 @@ describe("handleChatTurn", () => {
       llmClient,
       appBuilder,
       telemetry
-    })).rejects.toThrow("bedrock unavailable");
+    })).rejects.toThrow("ollama unavailable");
 
     expect(telemetry.events.map((event) => event.name)).toEqual(expect.arrayContaining([
       "requirement_extraction_started",

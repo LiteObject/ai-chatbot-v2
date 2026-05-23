@@ -168,6 +168,15 @@ async function handleRequirementCollectionTurn(
     return saveAndRespond(input, state, getContextLimitMessage(), contextWindow, telemetry, startedAt);
   }
 
+  const deterministicCasualResponse = getDeterministicCasualResponse(input.message);
+  if (deterministicCasualResponse) {
+    state.readyToBuild = false;
+    state.confirmed = false;
+    state.status = "collecting_requirements";
+    state.missingFields = getMissingFields(state.appSpec);
+    return saveAndRespond(input, state, deterministicCasualResponse, contextWindow, telemetry, startedAt);
+  }
+
   const extracted = await extractRequirements(state, input, telemetry);
 
   const casualResponse = countExtractedFields(extracted) === 0 ? getCasualResponse(input.message) : undefined;
@@ -737,6 +746,40 @@ function getCasualResponse(message: string): string | undefined {
 
   if (/^(hi|hello|hey)\b/.test(normalized)) {
     return "Hi. Tell me what kind of app you want to build and what problem it should solve.";
+  }
+
+  return undefined;
+}
+
+function getDeterministicCasualResponse(message: string): string | undefined {
+  const normalized = message.trim().toLowerCase();
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (/^(thanks|thank you|thx)[!. ]*$/.test(normalized)) {
+    return getCasualResponse(message);
+  }
+
+  if (/^(?:hi|hello|hey)[!. ]*$/.test(normalized)) {
+    return getCasualResponse(message);
+  }
+
+  if (/^how are you\??$/.test(normalized)) {
+    return getCasualResponse(message);
+  }
+
+  if (/^what(?:'s| is) your name\??$/.test(normalized)) {
+    return getCasualResponse(message);
+  }
+
+  if (/^where do you live\??$/.test(normalized)) {
+    return getCasualResponse(message);
+  }
+
+  if (/^tell me (?:a )?joke[!. ]*$/.test(normalized)) {
+    return getCasualResponse(message);
   }
 
   return undefined;

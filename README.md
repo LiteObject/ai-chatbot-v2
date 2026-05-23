@@ -2,7 +2,7 @@
 
 TypeScript app-building chatbot that gathers requirements, asks clarifying questions, confirms the final app spec, and then calls a guarded app-builder adapter.
 
-The first implementation uses Amazon Bedrock through the AWS SDK credential chain and local AWS SSO login. It does not use LangChain or LangGraph.
+The app uses local Ollama through the Ollama HTTP API. It does not use LangChain or LangGraph.
 
 ## Slot-Filling Chatbot Concept
 
@@ -22,7 +22,7 @@ On every message, the chatbot extracts only the requirements supported by the us
 ```mermaid
 flowchart TD
 	A[User message] --> B[Load conversation state]
-	B --> C[Extract partial AppSpec with Bedrock]
+	B --> C[Extract partial AppSpec with Ollama]
 	C --> D[Merge into typed AppSpec]
 	D --> E[Validate required slots]
 	E -->|Missing slots| F[Ask clarifying question]
@@ -51,46 +51,48 @@ This keeps the implementation transparent and testable. The chatbot can be conve
 
 - Node.js 20+
 - npm
-- AWS CLI configured for SSO
-- Amazon Bedrock model access in `us-east-1`
+- Ollama installed and running locally
+- The `gemma4:latest` model pulled into Ollama
 
 ## Setup
 
 ```bash
 npm install
 cp .env.example .env
-aws sso login
+ollama pull gemma4:latest
 ```
 
 The default model is:
 
 ```text
-us.anthropic.claude-haiku-4-5-20251001-v1:0
+gemma4:latest
 ```
 
-The local UI shows estimated context used over the configured model context window. Override the maximum with `BEDROCK_CONTEXT_WINDOW_TOKENS` when using a model with a different limit. The used value is estimated from server-side conversation state and current structured app spec, so provider token accounting may differ slightly.
+The Ollama endpoint defaults to `http://localhost:11434`. If Ollama is running elsewhere, set `OLLAMA_BASE_URL` in your `.env`. You can also change `OLLAMA_MODEL` there if you want to try a different local model.
+
+The local UI shows estimated context used over the configured model context window. Override the maximum with `OLLAMA_CONTEXT_WINDOW_TOKENS` when using a model with a different limit. The used value is estimated from server-side conversation state and current structured app spec, so provider token accounting may differ slightly.
 
 Context window handling is enforced on the backend:
 
-- Below `BEDROCK_CONTEXT_WINDOW_WARNING_RATIO`, the badge stays neutral and chat continues normally.
-- At or above `BEDROCK_CONTEXT_WINDOW_WARNING_RATIO` (default `0.8`), the badge changes to a warning state. If enough old messages exist, the backend compacts older transcript messages into the current structured app spec and keeps the latest turns.
-- At or above `BEDROCK_CONTEXT_WINDOW_BLOCK_RATIO` (default `0.95`), new LLM requirement extraction is paused to avoid silently dropping context. The current spec remains saved, and the UI disables the composer until the user starts a new conversation or the configured context window is increased.
+- Below `OLLAMA_CONTEXT_WINDOW_WARNING_RATIO`, the badge stays neutral and chat continues normally.
+- At or above `OLLAMA_CONTEXT_WINDOW_WARNING_RATIO` (default `0.8`), the badge changes to a warning state. If enough old messages exist, the backend compacts older transcript messages into the current structured app spec and keeps the latest turns.
+- At or above `OLLAMA_CONTEXT_WINDOW_BLOCK_RATIO` (default `0.95`), new LLM requirement extraction is paused to avoid silently dropping context. The current spec remains saved, and the UI disables the composer until the user starts a new conversation or the configured context window is increased.
 - Deterministic confirmation replies, such as a clear `yes` or `no` while the bot is awaiting confirmation, can still be handled without an LLM call.
 
 Tune these settings in `.env`:
 
 ```text
-BEDROCK_CONTEXT_WINDOW_TOKENS=200000
-BEDROCK_CONTEXT_WINDOW_WARNING_RATIO=0.8
-BEDROCK_CONTEXT_WINDOW_BLOCK_RATIO=0.95
+OLLAMA_CONTEXT_WINDOW_TOKENS=256000
+OLLAMA_CONTEXT_WINDOW_WARNING_RATIO=0.8
+OLLAMA_CONTEXT_WINDOW_BLOCK_RATIO=0.95
 ```
 
-Bedrock calls use bounded retry with exponential backoff for transient service errors such as throttling, request timeouts, and 5xx responses. Tune these settings in `.env`:
+Ollama calls use bounded retry with exponential backoff for transient service errors such as throttling, request timeouts, and 5xx responses. Tune these settings in `.env`:
 
 ```text
-BEDROCK_RETRY_ATTEMPTS=3
-BEDROCK_RETRY_BASE_DELAY_MS=250
-BEDROCK_RETRY_MAX_DELAY_MS=2000
+OLLAMA_RETRY_ATTEMPTS=3
+OLLAMA_RETRY_BASE_DELAY_MS=250
+OLLAMA_RETRY_MAX_DELAY_MS=2000
 ```
 
 The service emits structured Pino events for chat turns, requirement extraction, missing fields, confirmation decisions, app-builder calls, and retry scheduling. Metric-style log records are emitted for turn latency, started conversations, clarification questions, confirmation decisions, app creation outcomes, LLM request failures, and structured-output repair failures. The local service also keeps process-local in-memory metrics and exposes them through `GET /api/metrics`; the right-side UI panel polls that endpoint while the server is running.
@@ -134,7 +136,7 @@ GET /api/metrics
 ## Current Scope
 
 - In-memory conversation state.
-- Bedrock Converse API adapter with bounded transient retry.
+- Local Ollama chat API adapter with bounded transient retry.
 - Zod-validated app spec and state schemas.
 - Deterministic required-field validation.
 - Mock app-builder adapter that records create requests.

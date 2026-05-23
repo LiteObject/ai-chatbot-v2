@@ -8,6 +8,8 @@ const specDetails = document.querySelector("#specDetails");
 const missingFields = document.querySelector("#missingFields");
 const missingCount = document.querySelector("#missingCount");
 const conversationIdBadge = document.querySelector("#conversationIdBadge");
+const llmModelBadge = document.querySelector("#llmModelBadge");
+const llmModelValue = document.querySelector("#llmModelValue");
 const contextWindowBadge = document.querySelector("#contextWindowBadge");
 const metricsSummary = document.querySelector("#metricsSummary");
 const metricsUpdatedAt = document.querySelector("#metricsUpdatedAt");
@@ -114,7 +116,7 @@ async function submitCurrentMessage() {
 
     const result = await response.json();
     renderConversationState(result);
-    loadMetrics();
+    await loadMetrics();
   } catch {
     setStatus("failed");
     addMessage("assistant", "I could not process that message. Check the server logs and try again.");
@@ -170,6 +172,7 @@ async function loadRuntimeInfo() {
     contextWindowBlockRatio = Number(runtime.contextWindowBlockRatio) || contextWindowBlockRatio;
     contextWindowModelId = runtime.modelId || null;
     runtimeMetadataAvailable = true;
+    updateLlmModelBadge();
     updateContextWindowBadge();
   } catch {
     contextWindowMaxTokens = defaultContextWindowMaxTokens;
@@ -177,6 +180,7 @@ async function loadRuntimeInfo() {
     contextWindowBlockRatio = defaultContextWindowBlockRatio;
     contextWindowModelId = null;
     runtimeMetadataAvailable = false;
+    updateLlmModelBadge();
     updateContextWindowBadge();
   }
 }
@@ -273,6 +277,15 @@ function renderContextWindow(contextWindow) {
   }
 
   updateContextWindowBadge();
+}
+
+function updateLlmModelBadge() {
+  const hasModel = typeof contextWindowModelId === "string" && contextWindowModelId.trim().length > 0;
+  llmModelBadge.dataset.available = hasModel ? "true" : "false";
+  llmModelValue.textContent = hasModel ? contextWindowModelId : "Unavailable";
+  llmModelBadge.title = hasModel
+    ? `Active LLM model powering this chatbot: ${contextWindowModelId}`
+    : "The active LLM model is unavailable because runtime metadata could not be loaded.";
 }
 
 function updateContextWindowBadge() {
