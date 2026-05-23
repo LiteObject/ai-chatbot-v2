@@ -79,6 +79,7 @@ This file captures the current feature set of the support ticket intake chatbot 
 - Content-safety assessment on the merged ticket spec before confirmation or execution.
 - Jailbreak detection and sanitization for user messages.
 - Jailbreak detection and sanitization for extracted ticket fields.
+- Prompt injection resistance by treating user text and ticket data as untrusted content rather than instructions to follow.
 - Assistant fallback responses when content safety or jailbreak rules are triggered.
 - Sensitive-data redaction for:
   - user messages
@@ -92,7 +93,7 @@ This file captures the current feature set of the support ticket intake chatbot 
 ## Ticket Creation Features
 
 - Ticket creation is modeled as a command instead of a direct side effect.
-- Explicit human approval requirement enforced through confirmation before execution.
+- Explicit human-in-the-loop (HITL) approval requirement enforced through user confirmation before execution.
 - Idempotent command execution using an idempotency key.
 - Execution-lock protection so the same command cannot run concurrently.
 - Retry with bounded exponential backoff for retryable ticketing-system failures.
