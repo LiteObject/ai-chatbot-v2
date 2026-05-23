@@ -4,6 +4,8 @@ TypeScript ticket intake chatbot that gathers requirements, asks clarifying ques
 
 The app uses local Ollama through the Ollama HTTP API. It does not use LangChain or LangGraph.
 
+For a full feature inventory, including architecture-oriented behavior such as slot filling and command-based execution, see [FEATURES.md](FEATURES.md).
+
 ## Slot-Filling Chatbot Concept
 
 This project treats ticket creation as a slot-filling workflow. Instead of letting the LLM freely decide when a ticket is ready to file, the backend keeps a typed `TicketSpec` and fills it over multiple chat turns.
