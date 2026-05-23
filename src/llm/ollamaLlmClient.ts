@@ -1,11 +1,11 @@
 import type { AppConfig } from "../config";
-import { partialAppSpecSchema, type PartialAppSpec } from "../domain/appSpec";
+import { partialTicketSpecSchema, type PartialTicketSpec } from "../domain/ticketSpec";
 import { getErrorAttributes, noopTelemetry, type Telemetry } from "../observability/telemetry";
 import { isRetryableServiceError, withRetry } from "../reliability/retry";
 import type {
     ClarifyingQuestionInput,
     ConfirmationSummaryInput,
-    ExtractAppSpecInput,
+    ExtractTicketSpecInput,
     LlmClient
 } from "./llmClient";
 import {
@@ -76,22 +76,22 @@ export class OllamaLlmClient implements LlmClient {
         this.fetchImpl = fetchImpl ?? (defaultFetch as unknown as OllamaFetch);
     }
 
-    async extractAppSpec(input: ExtractAppSpecInput): Promise<PartialAppSpec> {
+    async extractTicketSpec(input: ExtractTicketSpecInput): Promise<PartialTicketSpec> {
         const text = await this.sendText(
-            "You extract structured app requirements and return strict JSON.",
+            "You extract structured support ticket requirements and return strict JSON.",
             buildExtractionPrompt(input.userMessage, input.currentSpec, input.missingFields),
             { json: true }
         );
 
         try {
-            return parseJsonWithSchema(text, partialAppSpecSchema);
+            return parseJsonWithSchema(text, partialTicketSpecSchema);
         } catch (error) {
             this.telemetry.event("llm_structured_output_validation_failed", {
-                task: "extract_app_spec",
+                task: "extract_ticket_spec",
                 ...getErrorAttributes(error)
             });
             this.telemetry.metric("llm_structured_output_failure_count", 1, {
-                task: "extract_app_spec"
+                task: "extract_ticket_spec"
             });
 
             const repaired = await this.sendText(
@@ -101,14 +101,14 @@ export class OllamaLlmClient implements LlmClient {
             );
 
             try {
-                return parseJsonWithSchema(repaired, partialAppSpecSchema);
+                return parseJsonWithSchema(repaired, partialTicketSpecSchema);
             } catch (repairError) {
                 this.telemetry.event("llm_structured_output_repair_failed", {
-                    task: "extract_app_spec",
+                    task: "extract_ticket_spec",
                     ...getErrorAttributes(repairError)
                 });
                 this.telemetry.metric("llm_structured_output_repair_failure_count", 1, {
-                    task: "extract_app_spec"
+                    task: "extract_ticket_spec"
                 });
                 return {};
             }
@@ -117,8 +117,8 @@ export class OllamaLlmClient implements LlmClient {
 
     async generateClarifyingQuestion(input: ClarifyingQuestionInput): Promise<string> {
         const text = await this.sendText(
-            "You ask concise product requirements questions.",
-            buildClarifyingQuestionPrompt(input.appSpec, input.missingFields)
+            "You ask concise support ticket intake questions.",
+            buildClarifyingQuestionPrompt(input.ticketSpec, input.missingFields)
         );
 
         return normalizeAssistantText(text);
@@ -126,8 +126,8 @@ export class OllamaLlmClient implements LlmClient {
 
     async generateConfirmationSummary(input: ConfirmationSummaryInput): Promise<string> {
         const text = await this.sendText(
-            "You summarize app specifications for final confirmation.",
-            buildConfirmationSummaryPrompt(input.appSpec)
+            "You summarize ticket specifications for final confirmation.",
+            buildConfirmationSummaryPrompt(input.ticketSpec)
         );
 
         return normalizeAssistantText(text);

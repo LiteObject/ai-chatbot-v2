@@ -28,13 +28,13 @@ describe("redaction", () => {
 
   it("redacts nested values and sensitive object fields", () => {
     const result = redactSensitiveValue({
-      purpose: "Build with Bearer abcdefghijklmnop",
+      summary: "Build with Bearer abcdefghijklmnop",
       apiKey: "secret-value",
       users: ["owner@example.com"]
     });
 
     expect(result.value).toEqual({
-      purpose: "Build with Bearer [REDACTED:bearer_token]",
+      summary: "Build with Bearer [REDACTED:bearer_token]",
       apiKey: "[REDACTED:sensitive_field]",
       users: ["[REDACTED:email]"]
     });
@@ -45,10 +45,10 @@ describe("redaction", () => {
     const telemetry = createCompositeTelemetry(recording);
 
     telemetry.event("example", {
-      errorMessage: "Builder failed with token=secret-token-123"
+      errorMessage: "Ticket creation failed with token=secret-token-123"
     });
 
-    expect(recording.events[0]?.attributes?.errorMessage).toBe("Builder failed with token=[REDACTED:labeled_secret]");
+    expect(recording.events[0]?.attributes?.errorMessage).toBe("Ticket creation failed with token=[REDACTED:labeled_secret]");
     expect(getErrorAttributes(new Error("password=hunter2-value"))).toEqual({
       errorName: "Error",
       errorMessage: "password=[REDACTED:labeled_secret]"

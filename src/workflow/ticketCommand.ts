@@ -1,13 +1,13 @@
-import type { AppSpec } from "../domain/appSpec";
-import { assessAppSpecSafety } from "../domain/contentSafety";
-import { assessAppSpecJailbreak } from "../domain/jailbreakResistance";
+import type { TicketSpec } from "../domain/ticketSpec";
+import { assessTicketSpecSafety } from "../domain/contentSafety";
+import { assessTicketSpecJailbreak } from "../domain/jailbreakResistance";
 import type { ConversationState } from "../domain/conversationState";
 import { getMissingFields } from "../domain/validation";
-import type { CreateAppResult } from "../appBuilder/appBuilderClient";
+import type { CreateTicketResult } from "../ticketingSystem/ticketingSystemClient";
 import { redactSensitiveText } from "../privacy/redaction";
 import { createHash } from "node:crypto";
 
-export type AppCommandRiskLevel = "high";
+export type TicketCommandRiskLevel = "high";
 export type HumanApprovalSource = "explicit_user_confirmation";
 
 export interface HumanApproval {
@@ -17,100 +17,100 @@ export interface HumanApproval {
   source: HumanApprovalSource;
 }
 
-export interface CreateAppCommand {
+export interface CreateTicketCommand {
   id: string;
-  type: "create_app";
+  type: "create_ticket";
   idempotencyKey: string;
   conversationId: string;
   requestedBy: string | null;
-  appSpec: AppSpec;
-  riskLevel: AppCommandRiskLevel;
+  ticketSpec: TicketSpec;
+  riskLevel: TicketCommandRiskLevel;
   approvalRequired: true;
   approval?: HumanApproval;
   plannedAt: string;
 }
 
-export type AppCommand = CreateAppCommand;
+export type TicketCommand = CreateTicketCommand;
 
-export type AppCommandStatus = "planned" | "executing" | "succeeded" | "failed" | "rejected";
-export type AppCommandAttemptStatus = "executing" | "succeeded" | "failed" | "rejected";
+export type TicketCommandStatus = "planned" | "executing" | "succeeded" | "failed" | "rejected";
+export type TicketCommandAttemptStatus = "executing" | "succeeded" | "failed" | "rejected";
 
-export interface AppCommandError {
+export interface TicketCommandError {
   errorName: string;
   errorMessage: string;
 }
 
-export interface AppCommandExecutionAttempt {
+export interface TicketCommandExecutionAttempt {
   attemptNumber: number;
-  status: AppCommandAttemptStatus;
+  status: TicketCommandAttemptStatus;
   startedAt: string;
   completedAt?: string;
   latencyMs?: number;
-  error?: AppCommandError;
+  error?: TicketCommandError;
 }
 
-export interface AppCommandToolOutput {
-  toolName: "app_builder";
+export interface TicketCommandToolOutput {
+  toolName: "ticketing_system";
   status: "succeeded" | "failed" | "rejected";
   recordedAt: string;
   latencyMs?: number;
-  output?: CreateAppResult;
-  error?: AppCommandError;
+  output?: CreateTicketResult;
+  error?: TicketCommandError;
   rejectionReason?: string;
 }
 
-export interface AppCommandRecord {
-  command: AppCommand;
-  status: AppCommandStatus;
+export interface TicketCommandRecord {
+  command: TicketCommand;
+  status: TicketCommandStatus;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
-  attempts: AppCommandExecutionAttempt[];
-  toolOutputs: AppCommandToolOutput[];
-  result?: CreateAppResult;
-  error?: AppCommandError;
+  attempts: TicketCommandExecutionAttempt[];
+  toolOutputs: TicketCommandToolOutput[];
+  result?: CreateTicketResult;
+  error?: TicketCommandError;
   rejectionReason?: string;
 }
 
-export function planCreateAppCommand(state: ConversationState): CreateAppCommand {
-  if (state.status !== "creating_app") {
-    throw new Error(`Cannot plan app creation while conversation status is ${state.status}.`);
+export function planCreateTicketCommand(state: ConversationState): CreateTicketCommand {
+  if (state.status !== "creating_ticket") {
+    throw new Error(`Cannot plan ticket creation while conversation status is ${state.status}.`);
   }
 
   if (!state.confirmed) {
-    throw new Error("Cannot plan app creation before explicit confirmation.");
+    throw new Error("Cannot plan ticket creation before explicit confirmation.");
   }
 
   if (!state.readyToBuild) {
-    throw new Error("Cannot plan app creation before requirements are ready.");
+    throw new Error("Cannot plan ticket creation before requirements are ready.");
   }
 
-  const missingFields = getMissingFields(state.appSpec);
+  const missingFields = getMissingFields(state.ticketSpec);
   if (missingFields.length > 0) {
-    throw new Error(`Cannot plan app creation with missing fields: ${missingFields.join(", ")}`);
+    throw new Error(`Cannot plan ticket creation with missing fields: ${missingFields.join(", ")}`);
   }
 
-  const jailbreak = assessAppSpecJailbreak(state.appSpec);
+  const jailbreak = assessTicketSpecJailbreak(state.ticketSpec);
   if (jailbreak.detected) {
-    throw new Error("Cannot plan app creation because the app spec violates jailbreak resistance policy.");
+    throw new Error("Cannot plan ticket creation because the ticket spec violates jailbreak resistance policy.");
   }
 
-  const contentSafety = assessAppSpecSafety(state.appSpec);
+  const contentSafety = assessTicketSpecSafety(state.ticketSpec);
   if (!contentSafety.allowed) {
-    throw new Error("Cannot plan app creation because the app spec violates content safety policy.");
+    throw new Error("Cannot plan ticket creation because the ticket spec violates content safety policy.");
   }
 
   const plannedAt = new Date().toISOString();
 
-  const commandId = buildCreateAppCommandId(state.conversationId, state.appSpec);
+  const commandId = buildCreateTicketCommandId(state.conversationId, state.ticketSpec);
 
   return {
     id: commandId,
-    type: "create_app",
+    type: "create_ticket",
     idempotencyKey: commandId,
     conversationId: state.conversationId,
     requestedBy: state.userId ?? null,
-    appSpec: structuredClone(state.appSpec),
+    ticketSpec: structuredClone(state.ticketSpec),
     riskLevel: "high",
     approvalRequired: true,
     approval: {
@@ -123,15 +123,15 @@ export function planCreateAppCommand(state: ConversationState): CreateAppCommand
   };
 }
 
-function buildCreateAppCommandId(conversationId: string, appSpec: AppSpec): string {
-  return `create_app:${conversationId}:${getAppSpecFingerprint(appSpec)}`;
+function buildCreateTicketCommandId(conversationId: string, ticketSpec: TicketSpec): string {
+  return `create_ticket:${conversationId}:${getTicketSpecFingerprint(ticketSpec)}`;
 }
 
-function getAppSpecFingerprint(appSpec: AppSpec): string {
-  return createHash("sha256").update(JSON.stringify(appSpec)).digest("hex").slice(0, 16);
+function getTicketSpecFingerprint(ticketSpec: TicketSpec): string {
+  return createHash("sha256").update(JSON.stringify(ticketSpec)).digest("hex").slice(0, 16);
 }
 
-export function createPlannedAppCommandRecord(command: AppCommand): AppCommandRecord {
+export function createPlannedTicketCommandRecord(command: TicketCommand): TicketCommandRecord {
   return {
     command: structuredClone(command),
     status: "planned",
@@ -142,7 +142,7 @@ export function createPlannedAppCommandRecord(command: AppCommand): AppCommandRe
   };
 }
 
-export function markAppCommandExecuting(record: AppCommandRecord, startedAt = new Date().toISOString()): AppCommandRecord {
+export function markTicketCommandExecuting(record: TicketCommandRecord, startedAt = new Date().toISOString()): TicketCommandRecord {
   const next = structuredClone(record);
   const attemptNumber = next.attempts.length + 1;
 
@@ -161,12 +161,12 @@ export function markAppCommandExecuting(record: AppCommandRecord, startedAt = ne
   return next;
 }
 
-export function markAppCommandSucceeded(
-  record: AppCommandRecord,
-  result: CreateAppResult,
+export function markTicketCommandSucceeded(
+  record: TicketCommandRecord,
+  result: CreateTicketResult,
   latencyMs: number,
   completedAt = new Date().toISOString()
-): AppCommandRecord {
+): TicketCommandRecord {
   const next = structuredClone(record);
   const currentAttempt = next.attempts.at(-1);
 
@@ -184,7 +184,7 @@ export function markAppCommandSucceeded(
   }
 
   next.toolOutputs.push({
-    toolName: "app_builder",
+    toolName: "ticketing_system",
     status: "succeeded",
     recordedAt: completedAt,
     latencyMs,
@@ -194,14 +194,14 @@ export function markAppCommandSucceeded(
   return next;
 }
 
-export function markAppCommandFailed(
-  record: AppCommandRecord,
+export function markTicketCommandFailed(
+  record: TicketCommandRecord,
   error: unknown,
   latencyMs: number,
   completedAt = new Date().toISOString()
-): AppCommandRecord {
+): TicketCommandRecord {
   const next = structuredClone(record);
-  const commandError = getAppCommandError(error);
+  const commandError = getTicketCommandError(error);
   const currentAttempt = next.attempts.at(-1);
 
   next.status = "failed";
@@ -219,7 +219,7 @@ export function markAppCommandFailed(
   }
 
   next.toolOutputs.push({
-    toolName: "app_builder",
+    toolName: "ticketing_system",
     status: "failed",
     recordedAt: completedAt,
     latencyMs,
@@ -229,14 +229,14 @@ export function markAppCommandFailed(
   return next;
 }
 
-export function markAppCommandRejected(
-  record: AppCommandRecord,
+export function markTicketCommandRejected(
+  record: TicketCommandRecord,
   rejectionReason: string,
   error: unknown,
   rejectedAt = new Date().toISOString()
-): AppCommandRecord {
+): TicketCommandRecord {
   const next = structuredClone(record);
-  const commandError = getAppCommandError(error);
+  const commandError = getTicketCommandError(error);
 
   next.status = "rejected";
   next.updatedAt = rejectedAt;
@@ -253,7 +253,7 @@ export function markAppCommandRejected(
     error: commandError
   });
   next.toolOutputs.push({
-    toolName: "app_builder",
+    toolName: "ticketing_system",
     status: "rejected",
     recordedAt: rejectedAt,
     error: commandError,
@@ -263,7 +263,7 @@ export function markAppCommandRejected(
   return next;
 }
 
-function getAppCommandError(error: unknown): AppCommandError {
+function getTicketCommandError(error: unknown): TicketCommandError {
   if (error instanceof Error) {
     return {
       errorName: error.name,

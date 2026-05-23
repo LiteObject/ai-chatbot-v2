@@ -4,7 +4,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>App Builder Chatbot</title>
+  <title>Support Ticket Intake</title>
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230ea5b7'/%3E%3Cpath d='M12 4 5 8l7 4 7-4-7-4Zm-7 8 7 4 7-4M5 16l7 4 7-4' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet"
@@ -26,7 +28,7 @@
             </svg>
           </span>
           <div class="brand-copy">
-            <h1>App Builder Chatbot</h1>
+            <h1>Support Ticket Intake</h1>
             <p id="statusText">Collecting requirements</p>
           </div>
         </div>
@@ -54,7 +56,7 @@
       <form id="chatForm" class="composer">
         <label class="sr-only" for="messageInput">Message</label>
         <div class="composer-field">
-          <textarea id="messageInput" rows="1" placeholder="Describe the app you want to build…"></textarea>
+          <textarea id="messageInput" rows="1" placeholder="Describe the request or incident…"></textarea>
           <div class="composer-meta">
             <span class="composer-hint">Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send</span>
             <button id="sendButton" type="submit" aria-label="Send message">
@@ -70,10 +72,10 @@
       </form>
     </section>
 
-    <aside class="spec-panel" aria-label="Current app specification">
+    <aside class="spec-panel" aria-label="Current ticket specification">
       <div class="panel-header">
         <div class="panel-title">
-          <h2>Current Spec</h2>
+          <h2>Current Ticket</h2>
           <p class="panel-subtitle">Live summary of what we know</p>
         </div>
         <span id="conversationIdBadge" title="Conversation ID"></span>

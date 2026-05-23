@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { InMemoryTelemetryAggregator } from "../../src/observability/inMemoryTelemetryAggregator";
 
 describe("InMemoryTelemetryAggregator", () => {
-  it("aggregates chat, extraction, confirmation, and app creation metrics", () => {
+  it("aggregates chat, extraction, confirmation, and ticket creation metrics", () => {
     const telemetry = new InMemoryTelemetryAggregator();
 
     telemetry.event("chat_turn_started", { conversationId: "conv_1" });
@@ -15,11 +15,11 @@ describe("InMemoryTelemetryAggregator", () => {
     telemetry.event("confirmation_requested", { conversationId: "conv_1" });
     telemetry.metric("confirmation_decision_count", 1, { decision: "yes" });
     telemetry.metric("confirmation_decision_count", 1, { decision: "ambiguous" });
-    telemetry.metric("app_creation_success_count", 1, { conversationId: "conv_1" });
-    telemetry.metric("app_creation_failure_count", 1, { conversationId: "conv_2" });
-    telemetry.metric("app_builder_latency_ms", 150, { conversationId: "conv_1" });
+    telemetry.metric("ticket_creation_success_count", 1, { conversationId: "conv_1" });
+    telemetry.metric("ticket_creation_failure_count", 1, { conversationId: "conv_2" });
+    telemetry.metric("ticketing_system_latency_ms", 150, { conversationId: "conv_1" });
     telemetry.metric("sensitive_data_redaction_count", 2, { boundary: "user_message" });
-    telemetry.metric("sensitive_data_redaction_count", 1, { boundary: "app_builder_result" });
+    telemetry.metric("sensitive_data_redaction_count", 1, { boundary: "ticketing_system_result" });
     telemetry.metric("content_safety_block_count", 1, { boundary: "user_message", categories: ["cyber_abuse"] });
     telemetry.metric("jailbreak_attempt_count", 1, { boundary: "user_message", outcome: "blocked", categories: ["prompt_exfiltration"] });
     telemetry.metric("jailbreak_attempt_count", 1, { boundary: "llm_extraction", outcome: "sanitized", categories: ["instruction_override"] });
@@ -69,7 +69,7 @@ describe("InMemoryTelemetryAggregator", () => {
         redactions: 3,
         byBoundary: {
           user_message: 2,
-          app_builder_result: 1
+          ticketing_system_result: 1
         }
       },
       contentSafety: {

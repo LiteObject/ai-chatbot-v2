@@ -1,22 +1,23 @@
-import type { AppSpec, PartialAppSpec } from "../domain/appSpec";
+import type { TicketSpec, PartialTicketSpec } from "../domain/ticketSpec";
 
-export interface ExtractAppSpecInput {
+export interface ExtractTicketSpecInput {
   userMessage: string;
-  currentSpec: AppSpec;
+  currentSpec: TicketSpec;
   missingFields: string[];
 }
 
 export interface ClarifyingQuestionInput {
-  appSpec: AppSpec;
+  ticketSpec: TicketSpec;
   missingFields: string[];
 }
 
 export interface ConfirmationSummaryInput {
-  appSpec: AppSpec;
+  ticketSpec: TicketSpec;
 }
 
 export interface LlmClient {
-  extractAppSpec(input: ExtractAppSpecInput): Promise<PartialAppSpec>;
+  extractTicketSpec(input: ExtractTicketSpecInput): Promise<PartialTicketSpec>;
   generateClarifyingQuestion(input: ClarifyingQuestionInput): Promise<string>;
   generateConfirmationSummary(input: ConfirmationSummaryInput): Promise<string>;
 }
+

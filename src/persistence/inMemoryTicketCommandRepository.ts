@@ -1,20 +1,20 @@
-import type { AppCommandRecord } from "../workflow/appCommand";
-import type { AppCommandRepository } from "./appCommandRepository";
+import type { TicketCommandRecord } from "../workflow/ticketCommand";
+import type { TicketCommandRepository } from "./ticketCommandRepository";
 
-export class InMemoryAppCommandRepository implements AppCommandRepository {
-  private readonly recordsByCommandId = new Map<string, AppCommandRecord>();
+export class InMemoryTicketCommandRepository implements TicketCommandRepository {
+  private readonly recordsByCommandId = new Map<string, TicketCommandRecord>();
   private readonly executionLocks = new Set<string>();
 
-  async get(commandId: string): Promise<AppCommandRecord | undefined> {
+  async get(commandId: string): Promise<TicketCommandRecord | undefined> {
     const record = this.recordsByCommandId.get(commandId);
     return record ? structuredClone(record) : undefined;
   }
 
-  async save(record: AppCommandRecord): Promise<void> {
+  async save(record: TicketCommandRecord): Promise<void> {
     this.recordsByCommandId.set(record.command.id, structuredClone(record));
   }
 
-  async listByConversationId(conversationId: string): Promise<AppCommandRecord[]> {
+  async listByConversationId(conversationId: string): Promise<TicketCommandRecord[]> {
     return [...this.recordsByCommandId.values()]
       .filter((record) => record.command.conversationId === conversationId)
       .map((record) => structuredClone(record))

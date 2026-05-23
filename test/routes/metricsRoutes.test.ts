@@ -9,7 +9,7 @@ describe("metrics routes", () => {
     const metrics = new InMemoryTelemetryAggregator();
 
     metrics.event("chat_turn_started", { conversationId: "conv_1" });
-    metrics.metric("app_creation_success_count", 1, { conversationId: "conv_1" });
+    metrics.metric("ticket_creation_success_count", 1, { conversationId: "conv_1" });
     metrics.metric("sensitive_data_redaction_count", 1, { boundary: "user_message" });
     metrics.metric("content_safety_block_count", 1, { boundary: "user_message", categories: ["cyber_abuse"] });
     metrics.metric("jailbreak_attempt_count", 1, { boundary: "user_message", outcome: "blocked", categories: ["prompt_exfiltration"] });

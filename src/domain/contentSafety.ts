@@ -1,4 +1,4 @@
-import type { AppSpec, PartialAppSpec } from "./appSpec";
+import type { TicketSpec, PartialTicketSpec } from "./ticketSpec";
 
 export const contentSafetyCategories = [
   "cyber_abuse",
@@ -25,7 +25,7 @@ interface ContentSafetyRule {
   pattern: RegExp;
 }
 
-const safeContextPattern = /\b(prevent|prevention|detect|detection|moderate|moderation|report|reporting|block|safety|education|educational|training|awareness|compliance|protect|protection|anti[- ]?|defense|defensive|remediation|response|support|help|hotline|audit|risk management)\b/i;
+const safeContextPattern = /\b(prevent|prevention|detect|detection|moderate|moderation|report|reporting|block|safety|education|educational|training|awareness|compliance|protect|protection|anti[- ]?|defense|defensive|remediation|response|hotline|audit|risk management)\b/i;
 
 const contentSafetyRules: ContentSafetyRule[] = [
   {
@@ -88,16 +88,16 @@ export function assessContentSafetyText(text: string): ContentSafetyAssessment {
   return blockContent(matchedRules);
 }
 
-export function assessAppSpecSafety(appSpec: AppSpec | PartialAppSpec): ContentSafetyAssessment {
-  return assessContentSafetyText(flattenAppSpecText(appSpec));
+export function assessTicketSpecSafety(ticketSpec: TicketSpec | PartialTicketSpec): ContentSafetyAssessment {
+  return assessContentSafetyText(flattenTicketSpecText(ticketSpec));
 }
 
 export function getContentSafetyBlockedMessage(): string {
-  return "I can't help build apps for harmful, abusive, illegal, or policy-violating purposes. I can help design a safe, compliant app for prevention, reporting, education, or legitimate business workflows.";
+  return "I can't help file tickets for harmful, abusive, illegal, or policy-violating activity. I can help document a safe, compliant request or incident instead.";
 }
 
 export function getContentSafetyAssistantFallback(): string {
-  return "I can't provide that content. I can help with a safe, compliant app design instead.";
+  return "I can't provide that content. I can help with a safe, compliant ticket instead.";
 }
 
 function allowContent(): ContentSafetyAssessment {
@@ -119,8 +119,8 @@ function blockContent(rules: ContentSafetyRule[]): ContentSafetyAssessment {
   };
 }
 
-function flattenAppSpecText(appSpec: AppSpec | PartialAppSpec): string {
-  return Object.values(appSpec).flatMap((value) => {
+function flattenTicketSpecText(ticketSpec: TicketSpec | PartialTicketSpec): string {
+  return Object.values(ticketSpec).flatMap((value) => {
     if (Array.isArray(value)) {
       return value;
     }

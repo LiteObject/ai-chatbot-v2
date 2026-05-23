@@ -61,7 +61,7 @@ export function compactConversationForContext(
   state.messages = [
     {
       role: "system",
-      content: `Earlier ${compactedCount} messages were compacted into the current app spec to keep this conversation within the model context window.`,
+      content: `Earlier ${compactedCount} messages were compacted into the current ticket spec to keep this conversation within the model context window.`,
       createdAt: new Date().toISOString()
     },
     ...retainedMessages
@@ -81,7 +81,7 @@ function buildContextPayload(state: ConversationState) {
       role: message.role,
       content: message.content
     })),
-    appSpec: state.appSpec,
+    ticketSpec: state.ticketSpec,
     missingFields: state.missingFields
   };
 }

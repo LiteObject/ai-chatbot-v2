@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEmptyAppSpec } from "../../src/domain/appSpec";
+import { createEmptyTicketSpec } from "../../src/domain/ticketSpec";
 import { OllamaLlmClient, type OllamaFetch } from "../../src/llm/ollamaLlmClient";
 
 const config = {
@@ -29,11 +29,11 @@ function createFetchResponse(body: string, status = 200, statusText = "OK") {
 }
 
 describe("OllamaLlmClient", () => {
-  it("extracts app specs and repairs malformed JSON responses", async () => {
+  it("extracts ticket specs and repairs malformed JSON responses", async () => {
     const requests: Array<{ input: string | URL; init: { method: string; headers: Record<string, string>; body: string } }> = [];
     const responses = [
-      createFetchResponse(JSON.stringify({ message: { content: "{\"appType\":\"crud\",\"purpose\":\"Track tickets\"" } })),
-      createFetchResponse(JSON.stringify({ message: { content: "{\"appType\":\"crud\",\"purpose\":\"Track tickets\",\"targetUsers\":[\"support team\"]}" } }))
+      createFetchResponse(JSON.stringify({ message: { content: "{\"ticketType\":\"request\",\"summary\":\"Reset VPN access\"" } })),
+      createFetchResponse(JSON.stringify({ message: { content: "{\"ticketType\":\"request\",\"summary\":\"Reset VPN access\",\"affectedUsers\":[\"contractors\"],\"affectedServices\":[\"vpn\"],\"details\":[\"restore VPN access\"]}" } }))
     ];
     const fetchImpl: OllamaFetch = async (input, init) => {
       requests.push({ input, init });
@@ -47,16 +47,18 @@ describe("OllamaLlmClient", () => {
     };
     const client = new OllamaLlmClient(config, undefined, fetchImpl);
 
-    const result = await client.extractAppSpec({
+    const result = await client.extractTicketSpec({
       userMessage: "Build a ticket tracker for support.",
-      currentSpec: createEmptyAppSpec(),
-      missingFields: ["appType", "purpose"]
+      currentSpec: createEmptyTicketSpec(),
+      missingFields: ["ticketType", "summary"]
     });
 
     expect(result).toEqual({
-      appType: "crud",
-      purpose: "Track tickets",
-      targetUsers: ["support team"]
+      ticketType: "request",
+      summary: "Reset VPN access",
+      affectedUsers: ["contractors"],
+      affectedServices: ["vpn"],
+      details: ["restore VPN access"]
     });
     expect(requests).toHaveLength(2);
 
@@ -105,8 +107,8 @@ describe("OllamaLlmClient", () => {
     const client = new OllamaLlmClient(config, undefined, fetchImpl);
 
     const result = await client.generateClarifyingQuestion({
-      appSpec: createEmptyAppSpec(),
-      missingFields: ["appType", "purpose"]
+      ticketSpec: createEmptyTicketSpec(),
+      missingFields: ["ticketType", "summary"]
     });
 
     expect(result).toBe("Missing details\n\nQuestion: What should it track?");

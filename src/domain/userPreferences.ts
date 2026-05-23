@@ -1,14 +1,13 @@
 import { z } from "zod";
-import { appTypes, type AppSpec } from "./appSpec";
+import { ticketTypes, type TicketSpec } from "./ticketSpec";
 
 const stringFieldSchema = z.string().trim().min(1);
 
 export const userPreferencesSchema = z.object({
   userId: stringFieldSchema,
-  preferredAppType: z.enum(appTypes).optional().nullable(),
-  preferredDeploymentTarget: stringFieldSchema.optional().nullable(),
-  preferredAuthRequired: z.boolean().optional().nullable(),
-  preferredIntegrations: z.array(stringFieldSchema).default([]),
+  preferredTicketType: z.enum(ticketTypes).optional().nullable(),
+  preferredEnvironment: stringFieldSchema.optional().nullable(),
+  preferredAffectedServices: z.array(stringFieldSchema).default([]),
   updatedAt: z.string()
 });
 
@@ -21,26 +20,22 @@ export function createUserPreferences(userId: string, updatedAt = new Date().toI
   });
 }
 
-export function mergeUserPreferencesFromAppSpec(existing: UserPreferences, appSpec: AppSpec): UserPreferences {
+export function mergeUserPreferencesFromTicketSpec(existing: UserPreferences, ticketSpec: TicketSpec): UserPreferences {
   const next: UserPreferences = {
     ...existing,
-    preferredIntegrations: [...existing.preferredIntegrations]
+    preferredAffectedServices: [...existing.preferredAffectedServices]
   };
 
-  if (appSpec.appType) {
-    next.preferredAppType = appSpec.appType;
+  if (ticketSpec.ticketType) {
+    next.preferredTicketType = ticketSpec.ticketType;
   }
 
-  if (appSpec.deploymentTarget) {
-    next.preferredDeploymentTarget = appSpec.deploymentTarget;
+  if (ticketSpec.environment) {
+    next.preferredEnvironment = ticketSpec.environment;
   }
 
-  if (appSpec.authRequired !== undefined && appSpec.authRequired !== null) {
-    next.preferredAuthRequired = appSpec.authRequired;
-  }
-
-  if (appSpec.integrations.length > 0) {
-    next.preferredIntegrations = mergePreferenceList(next.preferredIntegrations, appSpec.integrations);
+  if (ticketSpec.affectedServices.length > 0) {
+    next.preferredAffectedServices = mergePreferenceList(next.preferredAffectedServices, ticketSpec.affectedServices);
   }
 
   next.updatedAt = new Date().toISOString();

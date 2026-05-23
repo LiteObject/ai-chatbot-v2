@@ -1,30 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { createEmptyAppSpec } from "../../src/domain/appSpec";
+import { createEmptyTicketSpec } from "../../src/domain/ticketSpec";
 import { getMissingFields, getRequiredFieldsForSpec, isReadyToBuild } from "../../src/domain/validation";
 
 describe("getMissingFields", () => {
-  it("requires app type and purpose for an empty spec", () => {
-    expect(getMissingFields(createEmptyAppSpec())).toEqual(["appType", "purpose"]);
+  it("requires ticket type and summary for an empty spec", () => {
+    expect(getMissingFields(createEmptyTicketSpec())).toEqual(["ticketType", "summary"]);
   });
 
-  it("requires CRUD app fields", () => {
+  it("requires request fields", () => {
     const spec = {
-      ...createEmptyAppSpec(),
-      appType: "crud" as const,
-      purpose: "manage employees"
+      ...createEmptyTicketSpec(),
+      ticketType: "request" as const,
+      summary: "Need VPN access"
     };
 
-    expect(getMissingFields(spec)).toEqual(["targetUsers", "dataEntities", "coreFeatures"]);
+    expect(getMissingFields(spec)).toEqual(["affectedUsers", "affectedServices", "details"]);
   });
 
-  it("treats false boolean fields as present", () => {
+  it("requires incident impact before a ticket is ready", () => {
     const spec = {
-      ...createEmptyAppSpec(),
-      appType: "portal" as const,
-      purpose: "share project updates",
-      targetUsers: ["customers"],
-      coreFeatures: ["view project status"],
-      authRequired: false
+      ...createEmptyTicketSpec(),
+      ticketType: "incident" as const,
+      summary: "Payroll portal is down",
+      affectedUsers: ["payroll team"],
+      affectedServices: ["payroll portal"],
+      details: ["users get a 500 error"]
+    };
+
+    expect(getMissingFields(spec)).toEqual(["impact"]);
+  });
+
+  it("marks a complete incident as ready", () => {
+    const spec = {
+      ...createEmptyTicketSpec(),
+      ticketType: "incident" as const,
+      summary: "Payroll portal is down",
+      affectedUsers: ["payroll team"],
+      affectedServices: ["payroll portal"],
+      details: ["users get a 500 error"],
+      impact: "Payroll processing is blocked"
     };
 
     expect(getMissingFields(spec)).toEqual([]);
@@ -33,14 +47,22 @@ describe("getMissingFields", () => {
 });
 
 describe("getRequiredFieldsForSpec", () => {
-  it("requires app type and purpose before an app type is known", () => {
-    expect(getRequiredFieldsForSpec(createEmptyAppSpec())).toEqual(["appType", "purpose"]);
+  it("requires ticket type and summary before a ticket type is known", () => {
+    expect(getRequiredFieldsForSpec(createEmptyTicketSpec())).toEqual(["ticketType", "summary"]);
   });
 
-  it("adds app-type-specific required fields", () => {
+  it("adds request-specific required fields", () => {
     expect(getRequiredFieldsForSpec({
-      ...createEmptyAppSpec(),
-      appType: "workflow"
-    })).toEqual(["appType", "purpose", "targetUsers", "coreFeatures", "workflowSteps"]);
+      ...createEmptyTicketSpec(),
+      ticketType: "request"
+    })).toEqual(["ticketType", "summary", "affectedUsers", "affectedServices", "details"]);
+  });
+
+  it("adds incident-specific required fields", () => {
+    expect(getRequiredFieldsForSpec({
+      ...createEmptyTicketSpec(),
+      ticketType: "incident"
+    })).toEqual(["ticketType", "summary", "affectedUsers", "affectedServices", "details", "impact"]);
   });
 });
+

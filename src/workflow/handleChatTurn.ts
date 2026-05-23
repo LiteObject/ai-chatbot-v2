@@ -1,23 +1,23 @@
-import type { AppBuilderClient } from "../appBuilder/appBuilderClient";
+import type { TicketingSystemClient } from "../ticketingSystem/ticketingSystemClient";
 import {
-  normalizePlatformDeploymentTarget,
-  partialAppSpecSchema,
-  type AppSpec,
-  type AppSpecField,
-  type PartialAppSpec
-} from "../domain/appSpec";
+  normalizeTicketEnvironment,
+  partialTicketSpecSchema,
+  type TicketSpec,
+  type TicketSpecField,
+  type PartialTicketSpec
+} from "../domain/ticketSpec";
 import { classifyConfirmationDeterministically } from "../domain/confirmation";
 import {
-  assessAppSpecSafety,
+  assessTicketSpecSafety,
   assessContentSafetyText,
   getContentSafetyAssistantFallback,
   getContentSafetyBlockedMessage,
   type ContentSafetyAssessment
 } from "../domain/contentSafety";
 import {
-  assessAppSpecJailbreak,
+  assessTicketSpecJailbreak,
   assessJailbreakText,
-  assessPartialAppSpecJailbreak,
+  assessPartialTicketSpecJailbreak,
   getJailbreakAssistantFallback,
   getJailbreakBlockedMessage,
   type JailbreakAssessment
@@ -36,17 +36,17 @@ import {
   type ContextWindowOptions,
   type ContextWindowUsage
 } from "../domain/contextWindow";
-import { mergeAppSpec } from "../domain/mergeAppSpec";
-import { createUserPreferences, mergeUserPreferencesFromAppSpec, type UserPreferences } from "../domain/userPreferences";
+import { mergeTicketSpec } from "../domain/mergeTicketSpec";
+import { createUserPreferences, mergeUserPreferencesFromTicketSpec, type UserPreferences } from "../domain/userPreferences";
 import { getMissingFields, getRequiredFieldsForSpec } from "../domain/validation";
 import type { LlmClient } from "../llm/llmClient";
 import { getErrorAttributes, noopTelemetry, type Telemetry } from "../observability/telemetry";
-import type { AppCommandRepository } from "../persistence/appCommandRepository";
+import type { TicketCommandRepository } from "../persistence/ticketCommandRepository";
 import type { ConversationRepository } from "../persistence/conversationRepository";
 import type { UserPreferencesRepository } from "../persistence/userPreferencesRepository";
 import { redactSensitiveText, redactSensitiveValue, type RedactionFinding } from "../privacy/redaction";
-import { createPlannedAppCommandRecord, planCreateAppCommand, type AppCommandRecord } from "./appCommand";
-import { executeCreateAppCommand, type AppBuilderRetryOptions } from "./appCommandExecutor";
+import { createPlannedTicketCommandRecord, planCreateTicketCommand, type TicketCommandRecord } from "./ticketCommand";
+import { executeCreateTicketCommand, type TicketingSystemRetryOptions } from "./ticketCommandExecutor";
 
 export interface HandleChatTurnInput {
   conversationId: string;
@@ -54,11 +54,11 @@ export interface HandleChatTurnInput {
   message: string;
   repository: ConversationRepository;
   userPreferencesRepository?: UserPreferencesRepository;
-  commandRepository?: AppCommandRepository;
+  commandRepository?: TicketCommandRepository;
   llmClient: LlmClient;
-  appBuilder: AppBuilderClient;
+  ticketingSystem: TicketingSystemClient;
   contextWindow?: ContextWindowOptions;
-  appBuilderRetry?: AppBuilderRetryOptions;
+  ticketingSystemRetry?: TicketingSystemRetryOptions;
   telemetry?: Telemetry;
 }
 
@@ -67,16 +67,16 @@ export interface ChatTurnResponse {
   status: ConversationStatus;
   message: string;
   messages: ChatMessage[];
-  appSpec: AppSpec;
+  ticketSpec: TicketSpec;
   missingFields: string[];
-  requiredFields: AppSpecField[];
+  requiredFields: TicketSpecField[];
   contextWindow: ContextWindowUsage;
-  createdApp?: {
-    appId: string;
+  createdTicket?: {
+    ticketId: string;
     url: string;
   };
   userPreferences?: UserPreferences;
-  commands?: AppCommandRecord[];
+  commands?: TicketCommandRecord[];
 }
 
 export async function handleChatTurn(input: HandleChatTurnInput): Promise<ChatTurnResponse> {
@@ -173,7 +173,7 @@ async function handleRequirementCollectionTurn(
     state.readyToBuild = false;
     state.confirmed = false;
     state.status = "collecting_requirements";
-    state.missingFields = getMissingFields(state.appSpec);
+    state.missingFields = getMissingFields(state.ticketSpec);
     return saveAndRespond(input, state, deterministicCasualResponse, contextWindow, telemetry, startedAt);
   }
 
@@ -184,7 +184,7 @@ async function handleRequirementCollectionTurn(
     state.readyToBuild = false;
     state.confirmed = false;
     state.status = "collecting_requirements";
-    state.missingFields = getMissingFields(state.appSpec);
+    state.missingFields = getMissingFields(state.ticketSpec);
     return saveAndRespond(input, state, casualResponse, contextWindow, telemetry, startedAt);
   }
 
@@ -197,26 +197,26 @@ async function applyRequirementsAndRespond(
   contextWindow: ContextWindowOptions,
   telemetry: Telemetry,
   startedAt: number,
-  extracted: Partial<AppSpec>
+  extracted: Partial<TicketSpec>
 ): Promise<ChatTurnResponse> {
-  const mergedSpec = mergeAppSpec(state.appSpec, extracted);
-  const appSpecJailbreak = assessAppSpecJailbreak(mergedSpec);
-  if (appSpecJailbreak.detected) {
-    emitJailbreakTelemetry(telemetry, state.conversationId, state.userId, "app_spec", appSpecJailbreak);
+  const mergedSpec = mergeTicketSpec(state.ticketSpec, extracted);
+  const ticketSpecJailbreak = assessTicketSpecJailbreak(mergedSpec);
+  if (ticketSpecJailbreak.detected) {
+    emitJailbreakTelemetry(telemetry, state.conversationId, state.userId, "ticket_spec", ticketSpecJailbreak);
   }
-  if (!appSpecJailbreak.allowed) {
-    state.appSpec = appSpecJailbreak.sanitizedAppSpec;
+  if (!ticketSpecJailbreak.allowed) {
+    state.ticketSpec = ticketSpecJailbreak.sanitizedTicketSpec;
     return blockJailbreakTurn(input, state, contextWindow, telemetry, startedAt);
   }
 
-  const candidateSpec = appSpecJailbreak.sanitizedAppSpec;
-  const appSpecSafety = assessAppSpecSafety(candidateSpec);
-  if (!appSpecSafety.allowed) {
-    return blockUnsafeTurn(input, state, contextWindow, telemetry, startedAt, "app_spec", appSpecSafety);
+  const candidateSpec = ticketSpecJailbreak.sanitizedTicketSpec;
+  const ticketSpecSafety = assessTicketSpecSafety(candidateSpec);
+  if (!ticketSpecSafety.allowed) {
+    return blockUnsafeTurn(input, state, contextWindow, telemetry, startedAt, "ticket_spec", ticketSpecSafety);
   }
 
-  state.appSpec = candidateSpec;
-  state.missingFields = getMissingFields(state.appSpec);
+  state.ticketSpec = candidateSpec;
+  state.missingFields = getMissingFields(state.ticketSpec);
   telemetry.event("missing_fields_evaluated", {
     conversationId: state.conversationId,
     userId: state.userId ?? null,
@@ -230,7 +230,7 @@ async function applyRequirementsAndRespond(
     state.status = "collecting_requirements";
 
     const response = await input.llmClient.generateClarifyingQuestion({
-      appSpec: state.appSpec,
+      ticketSpec: state.ticketSpec,
       missingFields: state.missingFields
     });
 
@@ -245,11 +245,11 @@ async function applyRequirementsAndRespond(
   state.confirmed = false;
   state.status = "awaiting_confirmation";
 
-  const response = await input.llmClient.generateConfirmationSummary({ appSpec: state.appSpec });
+  const response = await input.llmClient.generateConfirmationSummary({ ticketSpec: state.ticketSpec });
   telemetry.event("confirmation_requested", {
     conversationId: state.conversationId,
     userId: state.userId ?? null,
-    appType: state.appSpec.appType ?? null
+    ticketType: state.ticketSpec.ticketType ?? null
   });
   return saveAndRespond(input, state, response, contextWindow, telemetry, startedAt);
 }
@@ -295,21 +295,21 @@ async function handleConfirmationTurn(
   }
 
   if (decision === "ambiguous") {
-    return saveAndRespond(input, state, "Please reply yes to create the app, or no if you want to change the requirements.", contextWindow, telemetry, startedAt);
+    return saveAndRespond(input, state, "Please reply yes to create the ticket, or no if you want to change the requirements.", contextWindow, telemetry, startedAt);
   }
 
   state.confirmed = true;
   state.readyToBuild = true;
-  state.status = "creating_app";
-  state.missingFields = getMissingFields(state.appSpec);
+  state.status = "creating_ticket";
+  state.missingFields = getMissingFields(state.ticketSpec);
 
-  const appSpecJailbreak = assessAppSpecJailbreak(state.appSpec);
-  if (appSpecJailbreak.detected) {
-    emitJailbreakTelemetry(telemetry, state.conversationId, state.userId, "app_spec", appSpecJailbreak);
-    state.appSpec = appSpecJailbreak.sanitizedAppSpec;
-    state.missingFields = getMissingFields(state.appSpec);
+  const ticketSpecJailbreak = assessTicketSpecJailbreak(state.ticketSpec);
+  if (ticketSpecJailbreak.detected) {
+    emitJailbreakTelemetry(telemetry, state.conversationId, state.userId, "ticket_spec", ticketSpecJailbreak);
+    state.ticketSpec = ticketSpecJailbreak.sanitizedTicketSpec;
+    state.missingFields = getMissingFields(state.ticketSpec);
   }
-  if (!appSpecJailbreak.allowed) {
+  if (!ticketSpecJailbreak.allowed) {
     state.confirmed = false;
     state.readyToBuild = false;
     return blockJailbreakTurn(input, state, contextWindow, telemetry, startedAt);
@@ -320,22 +320,22 @@ async function handleConfirmationTurn(
     state.readyToBuild = false;
     state.status = "collecting_requirements";
     const response = await input.llmClient.generateClarifyingQuestion({
-      appSpec: state.appSpec,
+      ticketSpec: state.ticketSpec,
       missingFields: state.missingFields
     });
     return saveAndRespond(input, state, response, contextWindow, telemetry, startedAt);
   }
 
-  const appSpecSafety = assessAppSpecSafety(state.appSpec);
-  if (!appSpecSafety.allowed) {
+  const ticketSpecSafety = assessTicketSpecSafety(state.ticketSpec);
+  if (!ticketSpecSafety.allowed) {
     state.confirmed = false;
     state.readyToBuild = false;
-    return blockUnsafeTurn(input, state, contextWindow, telemetry, startedAt, "app_spec", appSpecSafety);
+    return blockUnsafeTurn(input, state, contextWindow, telemetry, startedAt, "ticket_spec", ticketSpecSafety);
   }
 
-  const command = planCreateAppCommand(state);
-  await input.commandRepository?.save(createPlannedAppCommandRecord(command));
-  telemetry.event("app_command_planned", {
+  const command = planCreateTicketCommand(state);
+  await input.commandRepository?.save(createPlannedTicketCommandRecord(command));
+  telemetry.event("ticket_command_planned", {
     commandId: command.id,
     commandType: command.type,
     conversationId: state.conversationId,
@@ -343,35 +343,35 @@ async function handleConfirmationTurn(
     riskLevel: command.riskLevel,
     approvalRequired: command.approvalRequired,
     approvalSource: command.approval?.source,
-    appType: state.appSpec.appType ?? null
+    ticketType: state.ticketSpec.ticketType ?? null
   });
 
   try {
-    const execution = await executeCreateAppCommand({
+    const execution = await executeCreateTicketCommand({
       command,
-      appBuilder: input.appBuilder,
+      ticketingSystem: input.ticketingSystem,
       commandRepository: input.commandRepository,
-      retry: input.appBuilderRetry,
+      retry: input.ticketingSystemRetry,
       telemetry
     });
     const result = execution.result;
     state.status = "created";
-    state.createdAppId = result.appId;
-    state.createdAppUrl = result.url;
-    return saveAndRespond(input, state, `Created the app. You can open it at ${result.url}.`, contextWindow, telemetry, startedAt, {
-      appId: result.appId,
+    state.createdTicketId = result.ticketId;
+    state.createdTicketUrl = result.url;
+    return saveAndRespond(input, state, `Created the ticket. You can open it at ${result.url}.`, contextWindow, telemetry, startedAt, {
+      ticketId: result.ticketId,
       url: result.url
     });
   } catch (error) {
     state.status = "failed";
-    telemetry.event("app_command_failed_to_complete", {
+    telemetry.event("ticket_command_failed_to_complete", {
       commandId: command.id,
       commandType: command.type,
       conversationId: state.conversationId,
       userId: state.userId ?? null,
       ...getErrorAttributes(error)
     });
-    return saveAndRespond(input, state, "I could not create the app because the app builder failed. Your requirements are saved, so you can try again in a moment.", contextWindow, telemetry, startedAt);
+    return saveAndRespond(input, state, "I could not create the ticket because the ticketing system failed. Your requirements are saved, so you can try again in a moment.", contextWindow, telemetry, startedAt);
   }
 }
 
@@ -406,7 +406,7 @@ async function extractRequirements(
   state: ConversationState,
   input: HandleChatTurnInput,
   telemetry: Telemetry
-): Promise<Partial<AppSpec>> {
+): Promise<Partial<TicketSpec>> {
   telemetry.event("requirement_extraction_started", {
     conversationId: state.conversationId,
     userId: state.userId ?? null,
@@ -415,9 +415,9 @@ async function extractRequirements(
 
   let rawExtracted: unknown;
   try {
-    rawExtracted = await input.llmClient.extractAppSpec({
+    rawExtracted = await input.llmClient.extractTicketSpec({
       userMessage: input.message,
-      currentSpec: state.appSpec,
+      currentSpec: state.ticketSpec,
       missingFields: state.missingFields
     });
   } catch (error) {
@@ -428,7 +428,7 @@ async function extractRequirements(
     });
     telemetry.metric("llm_request_failure_count", 1, {
       conversationId: state.conversationId,
-      task: "extract_app_spec"
+      task: "extract_ticket_spec"
     });
     throw error;
   }
@@ -451,17 +451,17 @@ function validateExtractedRequirements(
   rawExtracted: unknown,
   state: ConversationState,
   telemetry: Telemetry
-): PartialAppSpec {
-  const parsed = partialAppSpecSchema.safeParse(rawExtracted);
+): PartialTicketSpec {
+  const parsed = partialTicketSpecSchema.safeParse(rawExtracted);
 
   if (parsed.success) {
     const redacted = redactSensitiveValue(parsed.data);
     emitRedactionTelemetry(telemetry, state.conversationId, state.userId, "llm_extraction", redacted.findings);
-    const jailbreak = assessPartialAppSpecJailbreak(redacted.value);
+    const jailbreak = assessPartialTicketSpecJailbreak(redacted.value);
     if (jailbreak.detected) {
       emitJailbreakTelemetry(telemetry, state.conversationId, state.userId, "llm_extraction", jailbreak);
     }
-    return jailbreak.sanitizedAppSpec;
+    return jailbreak.sanitizedTicketSpec;
   }
 
   telemetry.event("llm_extracted_requirements_rejected", {
@@ -483,7 +483,7 @@ async function saveAndRespond(
   contextWindow: ContextWindowOptions,
   telemetry: Telemetry,
   startedAt: number,
-  createdApp?: ChatTurnResponse["createdApp"]
+  createdTicket?: ChatTurnResponse["createdTicket"]
 ): Promise<ChatTurnResponse> {
   const messageRedaction = redactSensitiveText(message);
   const assistantSafety = assessContentSafetyText(messageRedaction.value);
@@ -520,11 +520,11 @@ async function saveAndRespond(
     status: state.status,
     message: safeMessage,
     messages: state.messages,
-    appSpec: state.appSpec,
+    ticketSpec: state.ticketSpec,
     missingFields: state.missingFields,
-    requiredFields: getRequiredFieldsForSpec(state.appSpec),
+    requiredFields: getRequiredFieldsForSpec(state.ticketSpec),
     contextWindow: getContextWindowUsage(state, contextWindow),
-    createdApp,
+    createdTicket,
     userPreferences,
     commands
   };
@@ -543,7 +543,7 @@ async function blockUnsafeTurn(
   state.confirmed = false;
   state.readyToBuild = false;
   state.status = "blocked";
-  state.missingFields = getMissingFields(state.appSpec);
+  state.missingFields = getMissingFields(state.ticketSpec);
   if (appendUserPlaceholder) {
     appendMessage(state, "user", "[Blocked user request omitted by content safety]");
   }
@@ -562,7 +562,7 @@ async function blockJailbreakTurn(
   state.confirmed = false;
   state.readyToBuild = false;
   state.status = "blocked";
-  state.missingFields = getMissingFields(state.appSpec);
+  state.missingFields = getMissingFields(state.ticketSpec);
   if (appendUserPlaceholder) {
     appendMessage(state, "user", "[Blocked user request omitted by jailbreak resistance]");
   }
@@ -647,105 +647,73 @@ async function saveUserPreferences(
   }
 
   const existingPreferences = await repository.get(state.userId) ?? createUserPreferences(state.userId);
-  const nextPreferences = mergeUserPreferencesFromAppSpec(existingPreferences, state.appSpec);
+  const nextPreferences = mergeUserPreferencesFromTicketSpec(existingPreferences, state.ticketSpec);
   await repository.save(nextPreferences);
   return nextPreferences;
 }
 
 function getContextLimitMessage(): string {
-  return "This conversation has reached the configured context limit, so I paused new requirement extraction to avoid dropping context. Your current spec is saved; start a new conversation or increase the context window setting before continuing.";
+  return "This conversation has reached the configured context limit, so I paused new requirement extraction to avoid dropping context. Your current ticket spec is saved; start a new conversation or increase the context window setting before continuing.";
 }
 
-function addDeterministicExtraction(message: string, extracted: PartialAppSpec): PartialAppSpec {
-  const deploymentTarget = normalizePlatformDeploymentTarget(message);
-  const authRequired = getDeterministicAuthRequirement(message);
-  const authIntegrations = getDeterministicAuthIntegrations(message);
+function addDeterministicExtraction(message: string, extracted: PartialTicketSpec): PartialTicketSpec {
+  const environment = normalizeTicketEnvironment(message);
+  const ticketType = getDeterministicTicketType(message);
   const next = { ...extracted };
 
-  if (deploymentTarget && !hasValue(next.deploymentTarget)) {
-    next.deploymentTarget = deploymentTarget;
+  if (ticketType && !hasValue(next.ticketType)) {
+    next.ticketType = ticketType;
   }
 
-  if (authRequired !== undefined && !hasValue(next.authRequired)) {
-    next.authRequired = authRequired;
-  }
-
-  if (authIntegrations.length > 0) {
-    next.integrations = [...(next.integrations ?? []), ...authIntegrations];
+  if (environment && !hasValue(next.environment)) {
+    next.environment = environment;
   }
 
   return next;
 }
 
-function getDeterministicAuthRequirement(message: string): boolean | undefined {
+function getDeterministicTicketType(message: string): TicketSpec["ticketType"] | undefined {
   const normalized = message.trim().toLowerCase();
   if (!normalized) {
     return undefined;
   }
 
-  const authPattern = /\b(auth|authentication|login|log in|sign in|signin|sign-in|single sign-on|sso|user accounts?)\b/;
-  if (!authPattern.test(normalized)) {
-    return undefined;
+  if (/\b(incident|bug|defect|error|broken|outage|down|failing|failure|cannot|can't|unable)\b/.test(normalized)) {
+    return "incident";
   }
 
-  const disabledPattern = /\b(no|without|skip|disable|exclude)\b.{0,40}\b(auth|authentication|login|log in|sign in|signin|sign-in|single sign-on|sso|user accounts?)\b|\b(do not|don't|dont|doesn't|does not|won't|will not|no need to|no need for)\b.{0,40}\b(auth|authentication|login|log in|sign in|signin|sign-in|single sign-on|sso|user accounts?)\b/;
-  if (disabledPattern.test(normalized)) {
-    return false;
+  if (/\b(request|service request|feature request|access request|password reset|unlock|provision|install|need access|need a|need an|would like)\b/.test(normalized)) {
+    return "request";
   }
 
-  return true;
-}
-
-function getDeterministicAuthIntegrations(message: string): string[] {
-  const normalized = message.trim().toLowerCase();
-  if (!normalized) {
-    return [];
-  }
-
-  const authProviderPattern = /\b(auth|authentication|login|log in|sign in|signin|sign-in|single sign-on|sso|oauth|openid connect|oidc)\b/;
-  if (!authProviderPattern.test(normalized)) {
-    return [];
-  }
-
-  const integrations: string[] = [];
-  if (/\bgoogle\b/.test(normalized)) {
-    integrations.push("Google auth");
-  }
-  if (/\b(microsoft|azure ad|entra|active directory)\b/.test(normalized)) {
-    integrations.push("Microsoft auth");
-  }
-  if (/\b(github|git hub)\b/.test(normalized)) {
-    integrations.push("GitHub auth");
-  }
-
-  return integrations;
+  return undefined;
 }
 
 function getCasualResponse(message: string): string | undefined {
   const normalized = message.trim().toLowerCase();
 
   if (/^(thanks|thank you|thx)\b/.test(normalized)) {
-    return "You're welcome. Tell me what you want to adjust next, or start a new conversation when you're ready for another app.";
+    return "You're welcome. Tell me what you want to adjust next, or start a new conversation when you're ready for another ticket.";
   }
 
   if (/\bhow are you\b/.test(normalized)) {
-    return "I'm doing well and ready to help with an app plan. What kind of app do you want to build, and what should it help users do?";
+    return "I'm doing well and ready to help with a support ticket. Tell me whether this is a request or an incident and what is happening.";
   }
 
   if (/\bwhat(?:'s| is) your name\b/.test(normalized)) {
-    return "I'm the app-building assistant for this workspace. Tell me what kind of app you want to build and the problem it should solve.";
+    return "I'm the ticket intake assistant for this workspace. Tell me whether this is a request or an incident and what you need help with.";
   }
 
   if (/\bwhere do you live\b/.test(normalized)) {
-    return "I run inside this local app-building chatbot service. Tell me what you want to create and who it is for.";
+    return "I run inside this local ticket intake chatbot service. Tell me what happened or what you need and I will help you file it.";
   }
 
   if (/\btell me (?:a )?joke\b/.test(normalized)) {
-    return "I'm focused on helping you define an app build. Tell me the kind of app you want and the problem it should solve.";
+    return "I'm focused on helping you file a support ticket. Tell me whether this is a request or an incident.";
   }
 
   if (/^(hi|hello|hey)\b/.test(normalized)) {
-    return "Hi. Tell me what kind of app you want to build and what problem it should solve.";
+    return "Hi. Tell me whether this is a request or an incident and what happened.";
   }
 
   return undefined;
@@ -787,16 +755,16 @@ function getDeterministicCasualResponse(message: string): string | undefined {
 
 function getCreatedConversationResponse(message: string, state: ConversationState): string {
   const normalized = message.trim().toLowerCase();
-  const appLocation = state.createdAppUrl ? ` at ${state.createdAppUrl}` : "";
+  const ticketLocation = state.createdTicketUrl ? ` at ${state.createdTicketUrl}` : "";
 
   if (/^(thanks|thank you|thx)\b/.test(normalized)) {
-    return `You're welcome. The created app is still available${appLocation}.`;
+    return `You're welcome. The created ticket is still available${ticketLocation}.`;
   }
 
-  return `This app has already been created${appLocation}. Use New to start a revised app or another build.`;
+  return `This ticket has already been created${ticketLocation}. Use New to start a revised ticket or another intake.`;
 }
 
-function countExtractedFields(extracted: Partial<AppSpec>): number {
+function countExtractedFields(extracted: Partial<TicketSpec>): number {
   return Object.values(extracted).filter((value) => {
     if (Array.isArray(value)) {
       return value.length > 0;
@@ -813,3 +781,4 @@ function hasValue(value: unknown): boolean {
 
   return value !== undefined && value !== null && value !== "";
 }
+

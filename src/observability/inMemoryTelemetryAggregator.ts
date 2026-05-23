@@ -83,7 +83,7 @@ export class InMemoryTelemetryAggregator implements Telemetry, MetricsSnapshotPr
   };
   private appCreationSuccess = 0;
   private appCreationFailure = 0;
-  private readonly appBuilderLatency: LatencyAccumulator = createLatencyAccumulator();
+  private readonly ticketingSystemLatency: LatencyAccumulator = createLatencyAccumulator();
   private privacyRedactions = 0;
   private readonly redactionsByBoundary: Record<string, number> = {};
   private contentSafetyBlocked = 0;
@@ -149,18 +149,18 @@ export class InMemoryTelemetryAggregator implements Telemetry, MetricsSnapshotPr
       return;
     }
 
-    if (name === "app_creation_success_count") {
+    if (name === "ticket_creation_success_count") {
       this.appCreationSuccess += countValue;
       return;
     }
 
-    if (name === "app_creation_failure_count") {
+    if (name === "ticket_creation_failure_count") {
       this.appCreationFailure += countValue;
       return;
     }
 
-    if (name === "app_builder_latency_ms") {
-      addLatency(this.appBuilderLatency, value);
+    if (name === "ticketing_system_latency_ms") {
+      addLatency(this.ticketingSystemLatency, value);
       return;
     }
 
@@ -224,7 +224,7 @@ export class InMemoryTelemetryAggregator implements Telemetry, MetricsSnapshotPr
         success: this.appCreationSuccess,
         failure: this.appCreationFailure,
         total: appCreationTotal,
-        latencyMs: summarizeLatency(this.appBuilderLatency)
+        latencyMs: summarizeLatency(this.ticketingSystemLatency)
       },
       privacy: {
         redactions: this.privacyRedactions,

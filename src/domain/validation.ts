@@ -1,25 +1,21 @@
-import type { AppSpec, AppSpecField, AppType } from "./appSpec";
+import type { TicketSpec, TicketSpecField, TicketType } from "./ticketSpec";
 
-const requiredFields: Record<AppType, AppSpecField[]> = {
-  crud: ["purpose", "targetUsers", "dataEntities", "coreFeatures"],
-  dashboard: ["purpose", "targetUsers", "dataEntities", "coreFeatures"],
-  workflow: ["purpose", "targetUsers", "coreFeatures", "workflowSteps"],
-  chatbot: ["purpose", "targetUsers", "dataEntities"],
-  portal: ["purpose", "targetUsers", "coreFeatures", "authRequired"],
-  other: ["purpose", "targetUsers", "coreFeatures"]
+const requiredFields: Record<TicketType, TicketSpecField[]> = {
+  request: ["summary", "affectedUsers", "affectedServices", "details"],
+  incident: ["summary", "affectedUsers", "affectedServices", "details", "impact"]
 };
 
-const vaguePurposes = new Set(["app", "application", "dashboard", "workflow", "crud", "chatbot", "portal", "tool", "system"]);
+const vagueSummaries = new Set(["ticket", "request", "incident", "bug", "issue", "problem", "support"]);
 
-export function getRequiredFields(appType: AppType): AppSpecField[] {
-  return requiredFields[appType];
+export function getRequiredFields(ticketType: TicketType): TicketSpecField[] {
+  return requiredFields[ticketType];
 }
 
-export function getRequiredFieldsForSpec(spec: AppSpec): AppSpecField[] {
-  const fields = new Set<AppSpecField>(["appType", "purpose"]);
+export function getRequiredFieldsForSpec(spec: TicketSpec): TicketSpecField[] {
+  const fields = new Set<TicketSpecField>(["ticketType", "summary"]);
 
-  if (spec.appType) {
-    for (const field of getRequiredFields(spec.appType)) {
+  if (spec.ticketType) {
+    for (const field of getRequiredFields(spec.ticketType)) {
       fields.add(field);
     }
   }
@@ -27,18 +23,18 @@ export function getRequiredFieldsForSpec(spec: AppSpec): AppSpecField[] {
   return [...fields];
 }
 
-export function getMissingFields(spec: AppSpec): AppSpecField[] {
-  const missing = new Set<AppSpecField>();
+export function getMissingFields(spec: TicketSpec): TicketSpecField[] {
+  const missing = new Set<TicketSpecField>();
 
-  if (!spec.appType) {
-    missing.add("appType");
+  if (!spec.ticketType) {
+    missing.add("ticketType");
   }
 
-  if (isPurposeMissing(spec)) {
-    missing.add("purpose");
+  if (isSummaryMissing(spec)) {
+    missing.add("summary");
   }
 
-  const fieldsToCheck = spec.appType ? getRequiredFields(spec.appType) : [];
+  const fieldsToCheck = spec.ticketType ? getRequiredFields(spec.ticketType) : [];
 
   for (const field of fieldsToCheck) {
     if (isFieldMissing(spec, field)) {
@@ -49,28 +45,28 @@ export function getMissingFields(spec: AppSpec): AppSpecField[] {
   return [...missing];
 }
 
-export function isReadyToBuild(spec: AppSpec): boolean {
+export function isReadyToBuild(spec: TicketSpec): boolean {
   return getMissingFields(spec).length === 0;
 }
 
-function isPurposeMissing(spec: AppSpec): boolean {
-  const purpose = spec.purpose?.trim().toLowerCase();
-  if (!purpose) {
+function isSummaryMissing(spec: TicketSpec): boolean {
+  const summary = spec.summary?.trim().toLowerCase();
+  if (!summary) {
     return true;
   }
 
-  if (vaguePurposes.has(purpose)) {
+  if (vagueSummaries.has(summary)) {
     return true;
   }
 
-  return spec.appType ? purpose === spec.appType : false;
+  return spec.ticketType ? summary === spec.ticketType : false;
 }
 
-function isFieldMissing(spec: AppSpec, field: AppSpecField): boolean {
+function isFieldMissing(spec: TicketSpec, field: TicketSpecField): boolean {
   const value = spec[field];
 
-  if (field === "purpose") {
-    return isPurposeMissing(spec);
+  if (field === "summary") {
+    return isSummaryMissing(spec);
   }
 
   if (Array.isArray(value)) {
@@ -79,3 +75,4 @@ function isFieldMissing(spec: AppSpec, field: AppSpecField): boolean {
 
   return value === null || value === undefined || value === "";
 }
+

@@ -1,6 +1,6 @@
 import fastify from "fastify";
-import type { AppBuilderClient } from "./appBuilder/appBuilderClient";
-import { MockAppBuilderClient } from "./appBuilder/mockAppBuilderClient";
+import type { TicketingSystemClient } from "./ticketingSystem/ticketingSystemClient";
+import { MockTicketingSystemClient } from "./ticketingSystem/mockTicketingSystemClient";
 import type { AppConfig } from "./config";
 import type { ContextWindowOptions } from "./domain/contextWindow";
 import { OllamaLlmClient } from "./llm/ollamaLlmClient";
@@ -8,9 +8,9 @@ import type { LlmClient } from "./llm/llmClient";
 import { InMemoryTelemetryAggregator } from "./observability/inMemoryTelemetryAggregator";
 import { createLoggerOptions } from "./observability/logger";
 import { createCompositeTelemetry, createLoggerTelemetry } from "./observability/telemetry";
-import type { AppCommandRepository } from "./persistence/appCommandRepository";
+import type { TicketCommandRepository } from "./persistence/ticketCommandRepository";
 import { InMemoryConversationRepository } from "./persistence/inMemoryConversationRepository";
-import { InMemoryAppCommandRepository } from "./persistence/inMemoryAppCommandRepository";
+import { InMemoryTicketCommandRepository } from "./persistence/inMemoryTicketCommandRepository";
 import { InMemoryUserPreferencesRepository } from "./persistence/inMemoryUserPreferencesRepository";
 import type { ConversationRepository } from "./persistence/conversationRepository";
 import type { UserPreferencesRepository } from "./persistence/userPreferencesRepository";
@@ -23,9 +23,9 @@ export interface BuildAppOptions {
   config: AppConfig;
   repository?: ConversationRepository;
   userPreferencesRepository?: UserPreferencesRepository;
-  commandRepository?: AppCommandRepository;
+  commandRepository?: TicketCommandRepository;
   llmClient?: LlmClient;
-  appBuilder?: AppBuilderClient;
+  ticketingSystem?: TicketingSystemClient;
   metrics?: InMemoryTelemetryAggregator;
 }
 
@@ -33,11 +33,11 @@ export async function buildApp(options: BuildAppOptions) {
   const server = fastify({ logger: createLoggerOptions(options.config) });
   const repository = options.repository ?? new InMemoryConversationRepository();
   const userPreferencesRepository = options.userPreferencesRepository ?? new InMemoryUserPreferencesRepository();
-  const commandRepository = options.commandRepository ?? new InMemoryAppCommandRepository();
+  const commandRepository = options.commandRepository ?? new InMemoryTicketCommandRepository();
   const metrics = options.metrics ?? new InMemoryTelemetryAggregator();
   const telemetry = createCompositeTelemetry(createLoggerTelemetry(server.log), metrics);
   const llmClient = options.llmClient ?? new OllamaLlmClient(options.config, telemetry);
-  const appBuilder = options.appBuilder ?? new MockAppBuilderClient();
+  const ticketingSystem = options.ticketingSystem ?? new MockTicketingSystemClient();
   const contextWindow: ContextWindowOptions = {
     maxTokens: options.config.ollamaContextWindowTokens,
     warningRatio: options.config.ollamaContextWindowWarningRatio,
@@ -53,7 +53,7 @@ export async function buildApp(options: BuildAppOptions) {
     userPreferencesRepository,
     commandRepository,
     llmClient,
-    appBuilder,
+    ticketingSystem,
     contextWindow,
     telemetry: metrics
   });
@@ -61,3 +61,4 @@ export async function buildApp(options: BuildAppOptions) {
 
   return server;
 }
+

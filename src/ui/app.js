@@ -16,35 +16,31 @@ const metricsUpdatedAt = document.querySelector("#metricsUpdatedAt");
 const newConversationButton = document.querySelector("#newConversationButton");
 
 const suggestionPrompts = [
-  "An internal CRUD app for inventory tracking",
-  "A customer-facing portal for support tickets",
-  "A workflow approval app for expense reports",
-  "A dashboard for sales pipeline analytics"
+  "Request VPN access for new contractors",
+  "Report that the payroll portal is down in production",
+  "Request a new laptop for a new hire",
+  "Report a bug in the expense approval form"
 ];
 
 const specIcons = {
-  appName: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg>',
-  purpose: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>',
-  appType: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h12"/></svg>',
-  deploymentTarget: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><circle cx="12" cy="9" r="3"/><path d="M3 21h18"/></svg>',
-  targetUsers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-  coreFeatures: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 2.4 5 5.6.8-4 3.9 1 5.5L12 14.8 6.9 17.2l1-5.5-4-3.9 5.6-.8z"/></svg>',
-  dataEntities: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
-  integrations: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7a5 5 0 0 1 0-10h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/></svg>',
-  authRequired: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
-  workflowSteps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="m3 6 .8 .8L5.5 5"/><path d="m3 12 .8 .8 1.7-1.8"/><path d="m3 18 .8 .8 1.7-1.8"/></svg>'
+  title: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg>',
+  summary: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>',
+  ticketType: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h12"/></svg>',
+  environment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><circle cx="12" cy="9" r="3"/><path d="M3 21h18"/></svg>',
+  impact: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 12h14"/></svg>',
+  affectedUsers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  details: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 2.4 5 5.6.8-4 3.9 1 5.5L12 14.8 6.9 17.2l1-5.5-4-3.9 5.6-.8z"/></svg>',
+  affectedServices: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
+  reproductionSteps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="m3 6 .8 .8L5.5 5"/><path d="m3 12 .8 .8 1.7-1.8"/><path d="m3 18 .8 .8 1.7-1.8"/></svg>',
+  notes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>'
 };
 
-const requiredFieldsByAppType = {
-  crud: ["purpose", "targetUsers", "dataEntities", "coreFeatures"],
-  dashboard: ["purpose", "targetUsers", "dataEntities", "coreFeatures"],
-  workflow: ["purpose", "targetUsers", "coreFeatures", "workflowSteps"],
-  chatbot: ["purpose", "targetUsers", "dataEntities"],
-  portal: ["purpose", "targetUsers", "coreFeatures", "authRequired"],
-  other: ["purpose", "targetUsers", "coreFeatures"]
+const requiredFieldsByTicketType = {
+  request: ["summary", "affectedUsers", "affectedServices", "details"],
+  incident: ["summary", "affectedUsers", "affectedServices", "details", "impact"]
 };
-const defaultRequiredFields = ["appType", "purpose"];
-const conversationKey = "app-builder-chatbot-conversation-id";
+const defaultRequiredFields = ["ticketType", "summary"];
+const conversationKey = "ticketing-system-chatbot-conversation-id";
 const metricsRefreshIntervalMs = 5000;
 const defaultContextWindowMaxTokens = 200000;
 const defaultContextWindowWarningRatio = 0.8;
@@ -60,7 +56,7 @@ let runtimeMetadataAvailable = false;
 let serverContextWindow = null;
 let requestInFlight = false;
 let currentStatus = "collecting_requirements";
-let currentAppSpec = {};
+let currentTicketSpec = {};
 let currentMissingFields = [];
 let currentRequiredFields = [...defaultRequiredFields];
 
@@ -216,8 +212,8 @@ function renderConversationState(state) {
   }
 
   setStatus(state.status);
-  const appSpec = state.appSpec || {};
-  renderSpec(appSpec, state.requiredFields);
+  const ticketSpec = state.ticketSpec || {};
+  renderSpec(ticketSpec, state.requiredFields);
   renderMissing(state.missingFields || []);
   renderContextWindow(state.contextWindow);
 }
@@ -240,7 +236,7 @@ function renderEmptyState() {
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
     </div>
-    <h2>Tell me what kind of app you want to build</h2>
+    <h2>Tell me what request or incident you need to file</h2>
     <p>Describe it in your own words, or pick a starting point below.</p>
     <div class="suggestion-chips" role="list"></div>
   `;
@@ -345,7 +341,7 @@ function estimateContextUsageTokens() {
   const contextPayload = {
     status: statusText.textContent,
     messages: messageContents,
-    appSpec: currentAppSpec,
+    ticketSpec: currentTicketSpec,
     missingFields: currentMissingFields,
     requiredFields: currentRequiredFields
   };
@@ -415,7 +411,7 @@ function addMessage(role, content) {
     const avatar = document.createElement("span");
     avatar.className = "message-avatar";
     avatar.setAttribute("aria-hidden", "true");
-    avatar.textContent = role === "user" ? "You" : "AB";
+    avatar.textContent = role === "user" ? "You" : "TI";
     node.appendChild(avatar);
   }
 
@@ -430,20 +426,20 @@ function addMessage(role, content) {
 }
 
 function renderSpec(spec, requiredFields = defaultRequiredFields) {
-  currentAppSpec = spec;
+  currentTicketSpec = spec;
   currentRequiredFields = resolveRequiredFields(spec, requiredFields);
   const requiredFieldSet = new Set(currentRequiredFields);
   const rows = [
-    ["appName", "Name", spec.appName],
-    ["purpose", "Purpose", spec.purpose],
-    ["appType", "Type", spec.appType],
-    ["deploymentTarget", "Platform", spec.deploymentTarget],
-    ["targetUsers", "Users", spec.targetUsers],
-    ["coreFeatures", "Features", spec.coreFeatures],
-    ["dataEntities", "Entities", spec.dataEntities],
-    ["workflowSteps", "Workflow", spec.workflowSteps],
-    ["integrations", "Integrations", spec.integrations],
-    ["authRequired", "Auth", formatBoolean(spec.authRequired)]
+    ["title", "Title", spec.title],
+    ["summary", "Summary", spec.summary],
+    ["ticketType", "Type", spec.ticketType],
+    ["impact", "Impact", spec.impact],
+    ["environment", "Environment", spec.environment],
+    ["affectedUsers", "Affected Users", spec.affectedUsers],
+    ["affectedServices", "Affected Services", spec.affectedServices],
+    ["details", "Details", spec.details],
+    ["reproductionSteps", "Repro Steps", spec.reproductionSteps],
+    ["notes", "Notes", spec.notes]
   ];
 
   specDetails.replaceChildren(
@@ -469,7 +465,7 @@ function renderSpec(spec, requiredFields = defaultRequiredFields) {
         const marker = document.createElement("span");
         marker.className = "required-marker";
         marker.textContent = "*";
-        marker.title = "Required for this app type";
+        marker.title = "Required for this ticket type";
         marker.setAttribute("aria-label", "required");
         term.appendChild(marker);
       }
@@ -495,7 +491,7 @@ function normalizeRequiredFields(fields) {
 function resolveRequiredFields(spec, fields) {
   const resolved = new Set(defaultRequiredFields);
 
-  for (const field of getRequiredFieldsForAppType(spec?.appType)) {
+  for (const field of getRequiredFieldsForTicketType(spec?.ticketType)) {
     resolved.add(field);
   }
 
@@ -506,9 +502,9 @@ function resolveRequiredFields(spec, fields) {
   return [...resolved];
 }
 
-function getRequiredFieldsForAppType(appType) {
-  const normalizedAppType = String(appType || "").trim().toLowerCase();
-  return requiredFieldsByAppType[normalizedAppType] || [];
+function getRequiredFieldsForTicketType(ticketType) {
+  const normalizedTicketType = String(ticketType || "").trim().toLowerCase();
+  return requiredFieldsByTicketType[normalizedTicketType] || [];
 }
 
 function renderMissing(fields) {
@@ -698,3 +694,4 @@ function isEmptySpecValue(value) {
 function splitCamelCase(value) {
   return value.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
 }
+

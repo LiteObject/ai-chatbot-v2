@@ -1,21 +1,17 @@
-import { appSpecSchema, type AppSpec, type PartialAppSpec } from "./appSpec";
+import { ticketSpecSchema, type TicketSpec, type PartialTicketSpec } from "./ticketSpec";
 
 const listFields = [
-  "targetUsers",
-  "coreFeatures",
-  "dataEntities",
-  "integrations",
-  "roles",
-  "permissions",
-  "reportingNeeds",
-  "workflowSteps",
+  "affectedUsers",
+  "affectedServices",
+  "details",
+  "reproductionSteps",
   "notes"
 ] as const;
 
-const scalarFields = ["appName", "purpose", "appType", "authRequired", "deploymentTarget"] as const;
+const scalarFields = ["title", "summary", "ticketType", "impact", "environment"] as const;
 
-export function mergeAppSpec(existing: AppSpec, extracted: PartialAppSpec): AppSpec {
-  const next: AppSpec = { ...existing };
+export function mergeTicketSpec(existing: TicketSpec, extracted: PartialTicketSpec): TicketSpec {
+  const next: TicketSpec = { ...existing };
 
   for (const field of scalarFields) {
     const value = extracted[field];
@@ -31,7 +27,7 @@ export function mergeAppSpec(existing: AppSpec, extracted: PartialAppSpec): AppS
     }
   }
 
-  return appSpecSchema.parse(next);
+  return ticketSpecSchema.parse(next);
 }
 
 function mergeLists(existing: string[], incoming: string[]): string[] {
@@ -50,3 +46,4 @@ function mergeLists(existing: string[], incoming: string[]): string[] {
 
   return [...byKey.values()];
 }
+

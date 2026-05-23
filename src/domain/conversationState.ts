@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { appSpecSchema, createEmptyAppSpec } from "./appSpec";
+import { ticketSpecSchema, createEmptyTicketSpec } from "./ticketSpec";
 
 export const conversationStatuses = [
   "collecting_requirements",
   "awaiting_confirmation",
-  "creating_app",
+  "creating_ticket",
   "created",
   "blocked",
   "failed",
@@ -21,12 +21,12 @@ export const conversationStateSchema = z.object({
   conversationId: z.string().min(1),
   userId: z.string().min(1).optional().nullable(),
   messages: z.array(messageSchema).default([]),
-  appSpec: appSpecSchema.default(createEmptyAppSpec),
+  ticketSpec: ticketSpecSchema.default(createEmptyTicketSpec),
   missingFields: z.array(z.string()).default([]),
   confirmed: z.boolean().default(false),
   readyToBuild: z.boolean().default(false),
-  createdAppId: z.string().optional().nullable(),
-  createdAppUrl: z.string().optional().nullable(),
+  createdTicketId: z.string().optional().nullable(),
+  createdTicketUrl: z.string().optional().nullable(),
   status: z.enum(conversationStatuses).default("collecting_requirements")
 });
 
@@ -38,7 +38,7 @@ export function createConversationState(conversationId: string, userId?: string 
   return conversationStateSchema.parse({
     conversationId,
     userId: userId ?? null,
-    appSpec: createEmptyAppSpec()
+    ticketSpec: createEmptyTicketSpec()
   });
 }
 
@@ -49,3 +49,4 @@ export function appendMessage(state: ConversationState, role: ChatMessage["role"
     createdAt: new Date().toISOString()
   });
 }
+

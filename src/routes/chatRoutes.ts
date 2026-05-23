@@ -1,21 +1,21 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { AppBuilderClient } from "../appBuilder/appBuilderClient";
+import type { TicketingSystemClient } from "../ticketingSystem/ticketingSystemClient";
 import {
   defaultContextWindowOptions,
   getContextWindowUsage,
   type ContextWindowOptions
 } from "../domain/contextWindow";
-import type { ConversationState } from "../domain/conversationState";
+import { createConversationState, type ConversationState } from "../domain/conversationState";
 import type { UserPreferences } from "../domain/userPreferences";
 import type { LlmClient } from "../llm/llmClient";
 import { createCompositeTelemetry, createLoggerTelemetry, getErrorAttributes, type Telemetry } from "../observability/telemetry";
-import type { AppCommandRepository } from "../persistence/appCommandRepository";
+import type { TicketCommandRepository } from "../persistence/ticketCommandRepository";
 import type { ConversationRepository } from "../persistence/conversationRepository";
 import type { UserPreferencesRepository } from "../persistence/userPreferencesRepository";
 import { redactSensitiveValue } from "../privacy/redaction";
 import { getRequiredFieldsForSpec } from "../domain/validation";
-import type { AppCommandRecord } from "../workflow/appCommand";
+import type { TicketCommandRecord } from "../workflow/ticketCommand";
 import { handleChatTurn } from "../workflow/handleChatTurn";
 
 const routeIdSchema = z.string().trim().min(1).max(200);
@@ -33,9 +33,9 @@ const conversationParamsSchema = z.object({
 export interface ChatRouteDependencies {
   repository: ConversationRepository;
   userPreferencesRepository?: UserPreferencesRepository;
-  commandRepository?: AppCommandRepository;
+  commandRepository?: TicketCommandRepository;
   llmClient: LlmClient;
-  appBuilder: AppBuilderClient;
+  ticketingSystem: TicketingSystemClient;
   contextWindow?: ContextWindowOptions;
   telemetry?: Telemetry;
 }
@@ -62,7 +62,7 @@ export async function registerChatRoutes(server: FastifyInstance, dependencies: 
     }
 
     if (!state) {
-      return reply.code(404).send({ error: "Conversation not found." });
+      return reply.send(serializeConversationState(createConversationState(parsed.data.conversationId), contextWindow));
     }
 
     const [userPreferences, commands] = await Promise.all([
@@ -96,7 +96,7 @@ export async function registerChatRoutes(server: FastifyInstance, dependencies: 
         userPreferencesRepository: dependencies.userPreferencesRepository,
         commandRepository: dependencies.commandRepository,
         llmClient: dependencies.llmClient,
-        appBuilder: dependencies.appBuilder,
+        ticketingSystem: dependencies.ticketingSystem,
         contextWindow,
         telemetry
       });
@@ -115,7 +115,7 @@ function serializeConversationState(
   state: ConversationState,
   contextWindow: ContextWindowOptions,
   userPreferences?: UserPreferences,
-  commands?: AppCommandRecord[]
+  commands?: TicketCommandRecord[]
 ) {
   const safeState = redactSensitiveValue(state).value;
   const safeUserPreferences = userPreferences ? redactSensitiveValue(userPreferences).value : undefined;
@@ -125,15 +125,16 @@ function serializeConversationState(
     conversationId: safeState.conversationId,
     status: safeState.status,
     messages: safeState.messages,
-    appSpec: safeState.appSpec,
+    ticketSpec: safeState.ticketSpec,
     missingFields: safeState.missingFields,
-    requiredFields: getRequiredFieldsForSpec(safeState.appSpec),
+    requiredFields: getRequiredFieldsForSpec(safeState.ticketSpec),
     contextWindow: getContextWindowUsage(safeState, contextWindow),
-    createdApp: safeState.createdAppId && safeState.createdAppUrl ? {
-      appId: safeState.createdAppId,
-      url: safeState.createdAppUrl
+    createdTicket: safeState.createdTicketId && safeState.createdTicketUrl ? {
+      ticketId: safeState.createdTicketId,
+      url: safeState.createdTicketUrl
     } : undefined,
     userPreferences: safeUserPreferences,
     commands: safeCommands
   };
 }
+

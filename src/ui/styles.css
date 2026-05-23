@@ -277,7 +277,7 @@ h3 {
 
 #statusText[data-status="collecting_requirements"] { color: var(--color-primary); }
 #statusText[data-status="awaiting_confirmation"],
-#statusText[data-status="creating_app"] { color: var(--color-warning); }
+#statusText[data-status="creating_ticket"] { color: var(--color-warning); }
 #statusText[data-status="created"] { color: var(--color-success); }
 #statusText[data-status="failed"],
 #statusText[data-status="cancelled"] { color: var(--color-danger); }
@@ -989,3 +989,4 @@ textarea:disabled {
     max-width: 100%;
   }
 }
+

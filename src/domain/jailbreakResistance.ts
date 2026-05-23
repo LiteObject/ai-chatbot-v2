@@ -1,4 +1,4 @@
-import type { AppSpec, PartialAppSpec } from "./appSpec";
+import type { TicketSpec, PartialTicketSpec } from "./ticketSpec";
 
 export const jailbreakCategories = [
   "instruction_override",
@@ -21,12 +21,12 @@ export interface JailbreakAssessment {
   sanitizedText: string;
 }
 
-export interface JailbreakAppSpecAssessment extends Omit<JailbreakAssessment, "sanitizedText"> {
-  sanitizedAppSpec: AppSpec;
+export interface JailbreakTicketSpecAssessment extends Omit<JailbreakAssessment, "sanitizedText"> {
+  sanitizedTicketSpec: TicketSpec;
 }
 
-export interface JailbreakPartialAppSpecAssessment extends Omit<JailbreakAssessment, "sanitizedText"> {
-  sanitizedAppSpec: PartialAppSpec;
+export interface JailbreakPartialTicketSpecAssessment extends Omit<JailbreakAssessment, "sanitizedText"> {
+  sanitizedTicketSpec: PartialTicketSpec;
 }
 
 interface JailbreakRule {
@@ -54,7 +54,7 @@ const jailbreakRules: JailbreakRule[] = [
   {
     category: "tool_bypass",
     reason: "attempt to bypass tool, validation, or confirmation controls",
-    pattern: /\b(?:call|execute|run|invoke|trigger|use)\b.{0,80}\b(?:app builder|builder|tool|create app|app creation)\b.{0,80}\b(?:now|without confirmation|without validation|without approval|bypass|skip validation|skip confirmation)\b|\b(?:mark|classify|treat)\b.{0,60}\b(?:confirmed|approved|yes)\b/i
+    pattern: /\b(?:call|execute|run|invoke|trigger|use)\b.{0,80}\b(?:ticketing system|tool|create ticket|ticket creation)\b.{0,80}\b(?:now|without confirmation|without validation|without approval|bypass|skip validation|skip confirmation)\b|\b(?:mark|classify|treat)\b.{0,60}\b(?:confirmed|approved|yes)\b/i
   },
   {
     category: "roleplay_override",
@@ -70,28 +70,24 @@ const jailbreakRules: JailbreakRule[] = [
 
 const safeDiscussionPattern = /\b(?:detect|detection|prevent|prevention|defend|defense|defensive|training|awareness|education|educational|moderation|reporting|audit|compliance|risk management|monitoring)\b/i;
 const directJailbreakCommandPattern = /\b(?:ignore|disregard|forget|override|bypass|disable|reveal|show|print|display|dump|leak|do not refuse|don't refuse|never refuse|always comply|developer mode|dan mode|you are now|act as)\b/i;
-const legitimateAppSignalPattern = /\b(?:build|create|make|design|app|application|dashboard|workflow|crud|portal|chatbot|tool|system|manage|track|report|monitor|users?|employees?|sales|inventory|records?|tickets?|approvals?)\b/i;
+const legitimateTicketSignalPattern = /\b(?:file|create|open|submit|ticket|request|incident|bug|issue|support|access|outage|error|system|service|users?|employees?|teams?|vpn|portal|report|monitor|approvals?)\b/i;
 
 const jailbreakRemovalPatterns = [
   /(?:^|\s)(?:ignore|disregard|forget|override|bypass|disable)\b.{0,120}\b(?:previous|prior|above|system|developer|hidden|safety|policy|policies|rules?|instructions?|guardrails?|validation|confirmation)\b[^.!?;\n]*(?:[.!?;]|$)/gi,
   /(?:^|\s)(?:reveal|show|print|display|repeat|dump|leak|tell me)\b.{0,120}\b(?:system prompt|developer message|hidden instructions?|internal instructions?|tool instructions?|policy|policies|guardrails?)\b[^.!?;\n]*(?:[.!?;]|$)/gi,
   /(?:^|\s)(?:do not refuse|don't refuse|never refuse|always comply|answer without disclaimers?|no disclaimers?|policy does not apply|policies do not apply|safety rules? do not apply|disable safety|bypass safety)\b[^.!?;\n]*(?:[.!?;]|$)/gi,
-  /(?:^|\s)(?:call|execute|run|invoke|trigger|use)\b.{0,120}\b(?:app builder|builder|tool|create app|app creation)\b.{0,120}\b(?:now|without confirmation|without validation|without approval|bypass|skip validation|skip confirmation)\b[^.!?;\n]*(?:[.!?;]|$)/gi,
+  /(?:^|\s)(?:call|execute|run|invoke|trigger|use)\b.{0,120}\b(?:ticketing system|tool|create ticket|ticket creation)\b.{0,120}\b(?:now|without confirmation|without validation|without approval|bypass|skip validation|skip confirmation)\b[^.!?;\n]*(?:[.!?;]|$)/gi,
   /(?:^|\s)(?:mark|classify|treat)\b.{0,80}\b(?:confirmed|approved|yes)\b[^.!?;\n]*(?:[.!?;]|$)/gi,
   /(?:^|\s)(?:developer mode|dan mode|jailbreak (?:this|the|your) (?:assistant|chatbot|model|system)|you are now (?:dan|unrestricted|uncensored|unfiltered)|act as (?:dan|an unrestricted|an uncensored|an unfiltered)|no restrictions|no safety filters)\b[^.!?;\n]*(?:[.!?;]|$)/gi,
   /(?:^|\s)(?:base64|rot13|encoded|decode this|hidden instruction|secret instruction)\b.{0,120}\b(?:follow|obey|execute|ignore|reveal|bypass)\b[^.!?;\n]*(?:[.!?;]|$)/gi
 ];
 
-const stringAppSpecFields = ["appName", "purpose", "deploymentTarget"] as const;
-const stringListAppSpecFields = [
-  "targetUsers",
-  "coreFeatures",
-  "dataEntities",
-  "integrations",
-  "roles",
-  "permissions",
-  "reportingNeeds",
-  "workflowSteps",
+const stringTicketSpecFields = ["title", "summary", "environment"] as const;
+const stringListTicketSpecFields = [
+  "affectedUsers",
+  "details",
+  "affectedServices",
+  "reproductionSteps",
   "notes"
 ] as const;
 
@@ -121,22 +117,22 @@ export function assessJailbreakText(text: string): JailbreakAssessment {
   };
 }
 
-export function assessAppSpecJailbreak(appSpec: AppSpec): JailbreakAppSpecAssessment {
-  const sanitizedAppSpec = sanitizeAppSpecTextFields(appSpec);
-  return buildAppSpecAssessment(appSpec, sanitizedAppSpec);
+export function assessTicketSpecJailbreak(ticketSpec: TicketSpec): JailbreakTicketSpecAssessment {
+  const sanitizedTicketSpec = sanitizeTicketSpecTextFields(ticketSpec);
+  return buildTicketSpecAssessment(ticketSpec, sanitizedTicketSpec);
 }
 
-export function assessPartialAppSpecJailbreak(appSpec: PartialAppSpec): JailbreakPartialAppSpecAssessment {
-  const sanitizedAppSpec = sanitizeAppSpecTextFields(appSpec);
-  return buildAppSpecAssessment(appSpec, sanitizedAppSpec);
+export function assessPartialTicketSpecJailbreak(ticketSpec: PartialTicketSpec): JailbreakPartialTicketSpecAssessment {
+  const sanitizedTicketSpec = sanitizeTicketSpecTextFields(ticketSpec);
+  return buildTicketSpecAssessment(ticketSpec, sanitizedTicketSpec);
 }
 
 export function getJailbreakBlockedMessage(): string {
-  return "I can't help with attempts to change my operating rules or access private instructions. Describe the app requirements directly and I can help design it.";
+  return "I can't help with attempts to change my operating rules or access private instructions. Describe the ticket details directly and I can help file it.";
 }
 
 export function getJailbreakAssistantFallback(): string {
-  return "I can't provide private instructions or change safety controls. I can help with the app requirements instead.";
+  return "I can't provide private instructions or change safety controls. I can help with the ticket details instead.";
 }
 
 function allowText(text: string): JailbreakAssessment {
@@ -189,17 +185,17 @@ function shouldBlockJailbreak(originalText: string, sanitizedText: string): bool
     return true;
   }
 
-  return !legitimateAppSignalPattern.test(sanitizedText) && !hasSubstantialNonJailbreakText(originalText, sanitizedText);
+  return !legitimateTicketSignalPattern.test(sanitizedText) && !hasSubstantialNonJailbreakText(originalText, sanitizedText);
 }
 
 function hasSubstantialNonJailbreakText(originalText: string, sanitizedText: string): boolean {
   return sanitizedText.length >= 12 && sanitizedText.length >= Math.min(80, Math.round(originalText.length * 0.25));
 }
 
-function sanitizeAppSpecTextFields<T extends AppSpec | PartialAppSpec>(appSpec: T): T {
-  const next: Record<string, unknown> = structuredClone(appSpec);
+function sanitizeTicketSpecTextFields<T extends TicketSpec | PartialTicketSpec>(ticketSpec: T): T {
+  const next: Record<string, unknown> = structuredClone(ticketSpec);
 
-  for (const field of stringAppSpecFields) {
+  for (const field of stringTicketSpecFields) {
     const value = next[field];
     if (typeof value !== "string") {
       continue;
@@ -217,7 +213,7 @@ function sanitizeAppSpecTextFields<T extends AppSpec | PartialAppSpec>(appSpec: 
     }
   }
 
-  for (const field of stringListAppSpecFields) {
+  for (const field of stringListTicketSpecFields) {
     const value = next[field];
     if (!Array.isArray(value)) {
       continue;
@@ -233,12 +229,12 @@ function sanitizeAppSpecTextFields<T extends AppSpec | PartialAppSpec>(appSpec: 
   return next as T;
 }
 
-function buildAppSpecAssessment<T extends AppSpec | PartialAppSpec>(
-  originalAppSpec: T,
-  sanitizedAppSpec: T
-): Omit<JailbreakAssessment, "sanitizedText"> & { sanitizedAppSpec: T } {
-  const originalText = flattenAppSpecText(originalAppSpec);
-  const sanitizedText = flattenAppSpecText(sanitizedAppSpec);
+function buildTicketSpecAssessment<T extends TicketSpec | PartialTicketSpec>(
+  originalTicketSpec: T,
+  sanitizedTicketSpec: T
+): Omit<JailbreakAssessment, "sanitizedText"> & { sanitizedTicketSpec: T } {
+  const originalText = flattenTicketSpecText(originalTicketSpec);
+  const sanitizedText = flattenTicketSpecText(sanitizedTicketSpec);
   const textAssessment = assessJailbreakText(originalText);
 
   if (!textAssessment.detected) {
@@ -248,7 +244,7 @@ function buildAppSpecAssessment<T extends AppSpec | PartialAppSpec>(
       action: "allow",
       categories: [],
       reason: null,
-      sanitizedAppSpec
+      sanitizedTicketSpec
     };
   }
 
@@ -259,12 +255,12 @@ function buildAppSpecAssessment<T extends AppSpec | PartialAppSpec>(
     action,
     categories: textAssessment.categories,
     reason: textAssessment.reason,
-    sanitizedAppSpec
+    sanitizedTicketSpec
   };
 }
 
-function flattenAppSpecText(appSpec: AppSpec | PartialAppSpec): string {
-  return Object.values(appSpec).flatMap((value) => {
+function flattenTicketSpecText(ticketSpec: TicketSpec | PartialTicketSpec): string {
+  return Object.values(ticketSpec).flatMap((value) => {
     if (Array.isArray(value)) {
       return value;
     }

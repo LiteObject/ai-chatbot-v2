@@ -8,6 +8,10 @@ export async function registerUiRoutes(server: FastifyInstance): Promise<void> {
   const distUiRoot = join(__dirname, "..", "ui");
   const root = existsSync(sourceUiRoot) ? sourceUiRoot : distUiRoot;
 
+  server.get("/favicon.ico", async (_, reply) => {
+    reply.code(204).send();
+  });
+
   await server.register(fastifyStatic, {
     root,
     prefix: "/"
