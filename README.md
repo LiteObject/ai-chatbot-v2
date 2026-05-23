@@ -119,6 +119,12 @@ Content-Type: application/json
 ```
 
 ```http
+GET /api/conversations/{conversationId}
+```
+
+`/api/conversations/{conversationId}` returns the saved conversation state for that ID. If the conversation does not exist yet, the API returns an empty `collecting_requirements` conversation payload for that ID so the UI can bootstrap a new session without treating the load as an error.
+
+```http
 GET /api/metrics
 ```
 
