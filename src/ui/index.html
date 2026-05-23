@@ -33,13 +33,6 @@
           </div>
         </div>
         <div class="topbar-actions">
-          <span id="llmModelBadge" class="runtime-model-badge" title="Active LLM model powering this chatbot"
-            data-available="false">
-            <span class="runtime-model-label">LLM</span>
-            <span id="llmModelValue" class="runtime-model-value">Loading...</span>
-          </span>
-          <span id="contextWindowBadge" class="context-window-badge"
-            title="Estimated context used / configured window">Ctx - / -</span>
           <button id="newConversationButton" type="button" class="ghost-button">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"
               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -96,6 +89,15 @@
             <h3>Metrics</h3>
             <span id="metricsUpdatedAt">-</span>
           </header>
+          <div class="runtime-overview" aria-label="Runtime details">
+            <span id="llmModelBadge" class="runtime-model-badge" title="Active LLM model powering this chatbot"
+              data-available="false">
+              <span class="runtime-model-label">LLM</span>
+              <span id="llmModelValue" class="runtime-model-value">Loading...</span>
+            </span>
+            <span id="contextWindowBadge" class="context-window-badge"
+              title="Estimated context used / configured window">Ctx - / -</span>
+          </div>
           <dl id="metricsSummary" class="metrics-summary"></dl>
         </section>
       </div>
